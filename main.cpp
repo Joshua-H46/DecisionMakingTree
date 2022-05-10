@@ -37,11 +37,11 @@ int main()
     rule2.addCheck(checkInt, 2);
     rule2.addCheck(checkDouble, 2.2);
     rule2.addCheck(checkDouble, 2.8);
-    rule2.addCheck(checkString, "ass");
+    rule2.addCheck(checkString, "as");
     rule2.addCheck(checkDouble, 23);
-    rule2.addCheck(checkString, "ass1");
-    rule2.addCheck(checkDouble, 3);
-    rule2.addCheck(checkString, "ass4");
+    // rule2.addCheck(checkString, "ass1");
+    // rule2.addCheck(checkDouble, 3);
+    // rule2.addCheck(checkString, "ass4");
     rule2.setData(p2);
     dt.addRule(rule1);
     dt.addRule(rule2);
@@ -51,8 +51,14 @@ int main()
     dt.addRule(rule2);
     dt.addRule(rule2);
     dt.prepare();
+    std::vector<int*> ret;
+    ret.reserve(16);
     auto start = std::chrono::high_resolution_clock::now();
-    auto ret = dt.apply(2);
+    for (int j=0; j<100; j++)
+    {
+        dt.apply(j, ret);
+        ret.clear();
+    }
     auto end = std::chrono::high_resolution_clock::now();
     std::cout << "Return " << ret.size() << " results\n";
     for (auto data : ret) {
