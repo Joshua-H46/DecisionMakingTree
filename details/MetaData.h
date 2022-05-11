@@ -121,12 +121,12 @@ namespace decision_tree {
     struct CLASS::getTypeName<SelectElem_0(_, _, x)> {              \
         constexpr static auto value = CLASS::TypeName::SelectElem_1(_, _, x);       \
     };
-#define MetaDataCheckSpecImpl()                                     \
+#define MetaDataCheckSpecImpl(CLASS)                                     \
     template<typename Target>                                       \
-    struct TestMetaData::_Check<Target, std::enable_if_t<std::is_fundamental_v<Target> || std::is_pointer_v<Target>>>   \
+    struct CLASS::_Check<Target, std::enable_if_t<std::is_fundamental_v<Target> || std::is_pointer_v<Target>>>   \
     {                                                               \
         static_assert(decision_tree::details::utils::has_type<Target, AllTypes>::value, "TypeName not supported");      \
-        typedef bool(*Checker)(const TestMetaData::CheckT&, Target);\
+        typedef bool(*Checker)(const CLASS::CheckT&, Target);\
         TypeName _type;                                             \
         Checker _checker;                                           \
         Target _data;                                               \
@@ -134,7 +134,7 @@ namespace decision_tree {
 #define MetaDataSpecificationImpl(CLASS, Seq)               \
     AllElems(Seq, CLASS, MetaDataGetTypeSpecImpl, MetaDataGetTypeSpecImpl)          \
     AllElems(Seq, CLASS, MetaDataGetTypeNameSpecImpl, MetaDataGetTypeNameSpecImpl)  \
-    MetaDataCheckSpecImpl()
+    MetaDataCheckSpecImpl(CLASS)
 
 /*  MetaData function implementation - mainly switch case   */
 #define MetaDataTypeEnumSwitchCase(CLASS, Seq, NormalCase, DefaultCase)     \
@@ -161,7 +161,7 @@ namespace decision_tree {
     }
 
 /*  template<typename Target>
-    TestMetaData::Check* TestMetaData::buildCheck(bool(* checker_)(const TestMetaData::CheckT&, std::conditional_t<std::is_compound_v<Target>, const Target&, Target>), const Target& target_)*/
+    MetaData::Check* MetaData::buildCheck(bool(* checker_)(const MetaData::CheckT&, std::conditional_t<std::is_compound_v<Target>, const Target&, Target>), const Target& target_)*/
 #define MetaDataBuildCheckImpl(CLASS, TYPE, Seq)            \
     template<typename Target>                               \
     CLASS::Check* CLASS::buildCheck(bool(* checker_)(const CLASS::CheckT&, std::conditional_t<std::is_compound_v<Target>, const Target&, Target>), const Target& target_)  \
@@ -206,14 +206,14 @@ namespace decision_tree {
     }
 #define MetaDataFreeDefaultCase(CLASS)
 #define MetaDataFreeImpl(CLASS, TYPE, Seq)                  \
-    void TestMetaData::free(CLASS::Check* check_)           \
+    void CLASS::free(CLASS::Check* check_)           \
     {                                                       \
         switch (check_->_type) {                            \
             MetaDataTypeEnumSwitchCase(CLASS, Seq, MetaDataFreeNormalCase, MetaDataFreeDefaultCase) \
         }                                                   \
     }
 
-/*  bool TestMetaData::applyCheck(const TestMetaData::CheckT& t_, TestMetaData::Check* check_)  */
+/*  bool MetaData::applyCheck(const MetaData::CheckT& t_, MetaData::Check* check_)  */
 #define MetaDataApplyNormalCase(_, Class, x)                \
     case TypeName::SelectElem_1(_,_,x):                     \
     {                                                       \
@@ -223,7 +223,7 @@ namespace decision_tree {
     }   
 #define MetaDataApplyDefaultCase(CLASS)
 #define MetaDataApplyImpl(CLASS, TYPE, Seq)                 \
-    bool TestMetaData::applyCheck(const TestMetaData::CheckT& t_, TestMetaData::Check* check_)  \
+    bool CLASS::applyCheck(const CLASS::CheckT& t_, CLASS::Check* check_)  \
     {                                                       \
         switch (check_->_type)                              \
         {                                                   \
