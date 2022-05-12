@@ -6,17 +6,50 @@
 #include <boost/hana.hpp>
 #include <boost/preprocessor.hpp>
 
-namespace decision_tree {
-    template<typename MetaData, typename DataType>
-    struct Rule;
-    template<typename MetaData, typename ReturnT>
-    class DecisionTree;
+namespace decision_tree { namespace details {
+    
+    template<typename MetaData>
+    struct Check
+    {
+        typedef void(*CheckerType)(void);       // a generic function pointer type
+        typename MetaData::TypeName _type;
+        CheckerType _checker;
+        char _data[8];                          // a generic data pointer
+    };
+    // class template that handles different Checks
+    template<typename MetaData, typename Target, typename Enable = void>
+    struct _Check
+    {
+        static_assert(decision_tree::details::utils::has_type<Target, typename MetaData::AllTypes>::value, "TypeName not supported");
+        typedef bool(*Checker)(const typename MetaData::CheckT&, const Target&);      // std::decay first?
+        typename MetaData::TypeName _type;
+        Checker _checker;       // checker function with signature bool (EO, Target)
+        Target _data;           // the data we use in the check
+    };
+    // specialization for _Check
+    template<typename MetaData, typename Target>
+    struct _Check<MetaData, Target, std::enable_if_t<std::is_fundamental_v<Target> || std::is_pointer_v<Target>>>
+    {
+        static_assert(decision_tree::details::utils::has_type<Target, typename MetaData::AllTypes>::value, "TypeName not supported");
+        typedef bool(*Checker)(const typename MetaData::CheckT&, Target);
+        typename MetaData::TypeName _type;
+        Checker _checker;
+        Target _data;
+    };
 
-    namespace details {
-        template<typename MetaData, typename DataType>
-        struct _Rule;
-    }
-}
+    template<typename MetaData>
+    struct MetaDataUtil
+    {
+        // helper function
+        static bool is_same(const Check<MetaData>* c1, const Check<MetaData>* c2);     // check if two checks are the same
+        template<typename Target>
+        static Check<MetaData>* buildCheck(bool(* checker_)(const typename MetaData::CheckT&, std::conditional_t<std::is_compound_v<Target>, const Target&, Target>), const Target& target_);
+        static Check<MetaData>* copy(Check<MetaData>* check_);
+        static void freeCheck(Check<MetaData>* c);                               // delete a Check object
+        static bool applyCheck(const typename MetaData::CheckT& t_, Check<MetaData>* check_);   // do check
+    };
+}}
+
 
 /*  Some Helper Macros  */
 #define AddTemplateT_0()
@@ -49,49 +82,12 @@ namespace decision_tree {
 #define MetaDataCompDef(Seq)                    \
     constexpr static auto CompPreds = boost::hana::make_tuple(AllElems(Seq, _, MetaDataMakeCompPair, MetaDataMakeCompPairs));
     
-/*  Check definition    */
-#define MetaDataCheckDef()                              \
-    struct Check                                        \
-    {                                                   \
-        typedef void(*CheckerType)(void);               \
-        TypeName _type;                                 \
-        CheckerType _checker;                           \
-        char _data[8];                                  \
-    };                                                  \
-                                                        \
-    template<typename Target, typename Enable = void>   \
-    struct _Check                                       \
-    {                                                   \
-        static_assert(decision_tree::details::utils::has_type<Target, AllTypes>::value, "TypeName not supported");      \
-        typedef bool(*Checker)(const CheckT&, const Target&);       \
-        TypeName _type;                                 \
-        Checker _checker;                               \
-        Target _data;                                   \
-    };                                          
-
 /*  MetaData class body impl    */
-#define MetaDataBodyImpl(Type, Seq)                     \
-    using CheckT = Type;                                \
+#define MetaDataBodyImpl(Type, Seq)                                 \
+    using CheckT = Type;                                            \
     using AllTypes = std::tuple<AllElems(Seq, _, SelectElem_0, SelectElems_0)>;  \
-    MetaDataTypeEnumDef(Seq)                            \
-    MetaDataCompDef(Seq)                                \
-    struct Check                                        \
-    {                                                   \
-        typedef void(*CheckerType)(void);               \
-        TypeName _type;                                 \
-        CheckerType _checker;                           \
-        char _data[8];                                  \
-    };                                                  \
-                                                        \
-    template<typename Target, typename Enable = void>   \
-    struct _Check                                       \
-    {                                                   \
-        static_assert(decision_tree::details::utils::has_type<Target, AllTypes>::value, "TypeName not supported");      \
-        typedef bool(*Checker)(const CheckT&, const Target&);       \
-        TypeName _type;                                             \
-        Checker _checker;                                           \
-        Target _data;                                               \
-    };                                                              \
+    MetaDataTypeEnumDef(Seq)                                        \
+    MetaDataCompDef(Seq)                                            \
                                                                     \
     template<TypeName t>                                            \
     struct getType {                                                \
@@ -101,14 +97,7 @@ namespace decision_tree {
     template<typename T>                                            \
     struct getTypeName {                                            \
         constexpr static auto value = TypeName::VOID;               \
-    };                                                              \
-                                                                    \
-    static bool is_same(const Check* c1, const Check* c2);          \
-    template<typename Target>                                       \
-    static Check* buildCheck(bool(* checker_)(const CheckT&, std::conditional_t<std::is_compound_v<Target>, const Target&, Target>), const Target& target_);    \
-    static Check* copy(Check* check_);                              \
-    static void free(Check* c);                                     \
-    static bool applyCheck(const CheckT& t_, Check* check_);            
+    };
 
 /* template struct specification  */
 #define MetaDataGetTypeSpecImpl(_, CLASS, x)                        \
@@ -121,36 +110,26 @@ namespace decision_tree {
     struct CLASS::getTypeName<SelectElem_0(_, _, x)> {              \
         constexpr static auto value = CLASS::TypeName::SelectElem_1(_, _, x);       \
     };
-#define MetaDataCheckSpecImpl(CLASS)                                     \
-    template<typename Target>                                       \
-    struct CLASS::_Check<Target, std::enable_if_t<std::is_fundamental_v<Target> || std::is_pointer_v<Target>>>   \
-    {                                                               \
-        static_assert(decision_tree::details::utils::has_type<Target, AllTypes>::value, "TypeName not supported");      \
-        typedef bool(*Checker)(const CLASS::CheckT&, Target);\
-        TypeName _type;                                             \
-        Checker _checker;                                           \
-        Target _data;                                               \
-    };
+
 #define MetaDataSpecificationImpl(CLASS, Seq)               \
     AllElems(Seq, CLASS, MetaDataGetTypeSpecImpl, MetaDataGetTypeSpecImpl)          \
-    AllElems(Seq, CLASS, MetaDataGetTypeNameSpecImpl, MetaDataGetTypeNameSpecImpl)  \
-    MetaDataCheckSpecImpl(CLASS)
+    AllElems(Seq, CLASS, MetaDataGetTypeNameSpecImpl, MetaDataGetTypeNameSpecImpl)
 
-/*  MetaData function implementation - mainly switch case   */
+/*  MetaDataUtil function implementation - mainly switch case   */
 #define MetaDataTypeEnumSwitchCase(CLASS, Seq, NormalCase, DefaultCase)     \
     BOOST_PP_SEQ_FOR_EACH(NormalCase, CLASS, Seq)                           \
     DefaultCase(CLASS)
 
-/* bool MetaData::is_same(const Check* c1, const Check* c2) */
+/* bool MetaDataUtil::is_same(const Check* c1, const Check* c2) */
 #define IsSameNormalCase(_, CLASS, x)                   \
     case CLASS::TypeName::SelectElem_1(_, _, x):              \
     {                                                   \
         using type = CLASS::getType<CLASS::TypeName::SelectElem_1(_, _, x)>::type;   \
-        return boost::hana::second(boost::hana::at_c<static_cast<int>(CLASS::TypeName::SelectElem_1(_, _, x))>(CompPreds))((*((type*)c1->_data)), (*((type*)c2->_data)));      \
+        return boost::hana::second(boost::hana::at_c<static_cast<int>(CLASS::TypeName::SelectElem_1(_, _, x))>(CLASS::CompPreds))((*((type*)c1->_data)), (*((type*)c2->_data)));      \
     }
 #define IsSameDefaultCase(CLASS)
-#define MetaDataIsSameImpl(CLASS, TYPE, Seq)    \
-    bool CLASS::is_same(const CLASS::Check* c1, const CLASS::Check* c2) {       \
+#define MetaDataUtilIsSameImpl(CLASS, TYPE, Seq)    \
+    static bool is_same(const Check<CLASS>* c1, const Check<CLASS>* c2) {       \
         if (c1->_type != c2->_type || c1->_checker != c2->_checker)             \
             return false;                                                       \
         switch (c1->_type)                                                      \
@@ -161,33 +140,33 @@ namespace decision_tree {
     }
 
 /*  template<typename Target>
-    MetaData::Check* MetaData::buildCheck(bool(* checker_)(const MetaData::CheckT&, std::conditional_t<std::is_compound_v<Target>, const Target&, Target>), const Target& target_)*/
-#define MetaDataBuildCheckImpl(CLASS, TYPE, Seq)            \
+    Check<MetaData>* MetaDataUtil::buildCheck(bool(* checker_)(const MetaData::CheckT&, std::conditional_t<std::is_compound_v<Target>, const Target&, Target>), const Target& target_)*/
+#define MetaDataUtilBuildCheckImpl(CLASS, TYPE, Seq)        \
     template<typename Target>                               \
-    CLASS::Check* CLASS::buildCheck(bool(* checker_)(const CLASS::CheckT&, std::conditional_t<std::is_compound_v<Target>, const Target&, Target>), const Target& target_)  \
+    static Check<CLASS>* buildCheck(bool(* checker_)(const typename CLASS::CheckT&, std::conditional_t<std::is_compound_v<Target>, const Target&, Target>), const Target& target_)  \
     {                                                       \
-        auto check = new _Check<std::decay_t<Target>>();    \
-        check->_type = getTypeName<Target>::value;          \
+        auto check = new _Check<CLASS, std::decay_t<Target>>();  \
+        check->_type = CLASS::getTypeName<Target>::value;   \
         check->_checker = checker_;                         \
         check->_data = target_;                             \
-        return (Check*)check;                               \
+        return (Check<CLASS>*)check;                        \
     }
 
-/*  Check* MetaData::copy(Check* check_)    */
+/*  Check* MetaDataUtil::copy(Check* check_)    */
 #define MetaDataCopyNormalCase(_, CLASS, x)                 \
     case CLASS::TypeName::SelectElem_1(_, _, x):            \
     {                                                       \
-        using type = getType<TypeName::SelectElem_1(_, _, x)>::type;    \
-        auto in_check = new _Check<type>();                 \
+        using type = CLASS::getType<CLASS::TypeName::SelectElem_1(_, _, x)>::type;    \
+        auto in_check = new _Check<CLASS, type>();          \
         in_check->_type = check_->_type;                    \
-        in_check->_checker = (typename _Check<type>::Checker)check_->_checker;  \
+        in_check->_checker = (typename _Check<CLASS, type>::Checker)check_->_checker;  \
         in_check->_data = *((type*)check_->_data);          \
-        return (Check*)in_check;                            \
+        return (Check<CLASS>*)in_check;                     \
         break;                                              \
     }
 #define MetaDataCopyDefaultCase(CLASS)
-#define MetaDataCopyImpl(CLASS, TYPE, Seq)                  \
-    CLASS::Check* CLASS::copy(CLASS::Check* check_)         \
+#define MetaDataUtilCopyImpl(CLASS, TYPE, Seq)              \
+    static Check<CLASS>* copy(Check<CLASS>* check_)         \
     {                                                       \
         switch (check_->_type)                              \
         {                                                   \
@@ -196,17 +175,17 @@ namespace decision_tree {
         return nullptr;                                     \
     }
 
-/*  void MetaData::free(Check* check_)  */
+/*  void MetaData::freeCheck(Check* check_)  */
 #define MetaDataFreeNormalCase(_, CLASS, x)                 \
     case CLASS::TypeName::SelectElem_1(_,_,x):              \
     {                                                       \
-        using type = getType<TypeName::SelectElem_1(_,_,x)>::type;      \
-        delete (_Check<CheckT, type>*)check_;               \
+        using type = CLASS::getType<CLASS::TypeName::SelectElem_1(_,_,x)>::type;      \
+        delete (_Check<CLASS, type>*)check_;                \
         break;                                              \
     }
 #define MetaDataFreeDefaultCase(CLASS)
-#define MetaDataFreeImpl(CLASS, TYPE, Seq)                  \
-    void CLASS::free(CLASS::Check* check_)           \
+#define MetaDataUtilFreeImpl(CLASS, TYPE, Seq)              \
+    static void freeCheck(Check<CLASS>* check_)             \
     {                                                       \
         switch (check_->_type) {                            \
             MetaDataTypeEnumSwitchCase(CLASS, Seq, MetaDataFreeNormalCase, MetaDataFreeDefaultCase) \
@@ -214,16 +193,16 @@ namespace decision_tree {
     }
 
 /*  bool MetaData::applyCheck(const MetaData::CheckT& t_, MetaData::Check* check_)  */
-#define MetaDataApplyNormalCase(_, Class, x)                \
-    case TypeName::SelectElem_1(_,_,x):                     \
+#define MetaDataApplyNormalCase(_, CLASS, x)                \
+    case CLASS::TypeName::SelectElem_1(_,_,x):                     \
     {                                                       \
-        using type = getType<TypeName::SelectElem_1(_,_,x)>::type;          \
-        using Checker = typename _Check<type>::Checker;     \
+        using type = CLASS::getType<CLASS::TypeName::SelectElem_1(_,_,x)>::type;          \
+        using Checker = typename _Check<CLASS, type>::Checker;     \
         return ((Checker)check_->_checker)(t_, *((type*)check_->_data));    \
     }   
 #define MetaDataApplyDefaultCase(CLASS)
-#define MetaDataApplyImpl(CLASS, TYPE, Seq)                 \
-    bool CLASS::applyCheck(const CLASS::CheckT& t_, CLASS::Check* check_)  \
+#define MetaDataUtilApplyImpl(CLASS, TYPE, Seq)             \
+    static bool applyCheck(const typename CLASS::CheckT& t_, Check<CLASS>* check_)  \
     {                                                       \
         switch (check_->_type)                              \
         {                                                   \
@@ -231,12 +210,17 @@ namespace decision_tree {
         }                                                   \
         return false;                                       \
     }
-#define MetaDataFuncImpl(CLASS, TYPE, Seq)      \
-    MetaDataIsSameImpl(CLASS, TYPE, Seq)        \
-    MetaDataBuildCheckImpl(CLASS, TYPE, Seq)    \
-    MetaDataCopyImpl(CLASS, TYPE, Seq)          \
-    MetaDataApplyImpl(CLASS, TYPE, Seq)         \
-    MetaDataFreeImpl(CLASS, TYPE, Seq)
+
+#define MetaDataUtilSpecImpl(CLASS, TYPE, Seq)              \
+    template<>                                              \
+    struct MetaDataUtil<CLASS>                              \
+    {                                                       \
+        MetaDataUtilIsSameImpl(CLASS, TYPE, Seq)            \
+        MetaDataUtilBuildCheckImpl(CLASS, TYPE, Seq)        \
+        MetaDataUtilCopyImpl(CLASS, TYPE, Seq)              \
+        MetaDataUtilApplyImpl(CLASS, TYPE, Seq)             \
+        MetaDataUtilFreeImpl(CLASS, TYPE, Seq)              \
+    };
 
 
 /*  **********************************
@@ -250,13 +234,13 @@ namespace decision_tree {
             ((std::string,  STRING,         equal_string)));
         A classes named Nebula_MetaData would be constructed
         The third argument in each line defines how to compare two objects of the same type and is optional(std::equal_to by default)
+    ATTENTION: MUST BE CALLED OUTSIDE ANY NAMESPACE!!!
     ************************************    */
-#define RegisterMetaType(Name, Type, Seq)       \
-class Name ## MetaData {                        \
-    AddFriendClass(decision_tree::Rule, 2);                             \
-    AddFriendClass(decision_tree::details::_Rule, 2);                   \
-    AddFriendClass(decision_tree::DecisionTree, 2);                     \
-    MetaDataBodyImpl(Type, Seq);                                        \
-};                                                                      \
-MetaDataSpecificationImpl(Name ## MetaData, Seq)                        \
-MetaDataFuncImpl(Name ## MetaData, Type, Seq)
+#define RegisterMetaType(Name, Type, Seq)               \
+namespace decision_tree { namespace details {           \
+    struct Name ## MetaData {                           \
+        MetaDataBodyImpl(Type, Seq);                    \
+    };                                                  \
+    MetaDataSpecificationImpl(Name ## MetaData, Seq)    \
+    MetaDataUtilSpecImpl(Name ## MetaData, TYPE, Seq)   \
+}}

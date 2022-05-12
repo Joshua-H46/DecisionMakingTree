@@ -5,7 +5,7 @@
 
 namespace decision_tree {
 
-    template<typename MetaData, typename DataType>
+    template<typename MetaData, typename MetaDataUtil, typename DataType>
     class DecisionTree;
     
     namespace details {
@@ -13,7 +13,7 @@ namespace decision_tree {
         template<typename MetaData, typename DataType>
         struct _Rule
         {
-            using Check = typename MetaData::Check;
+            using Check = typename details::Check<MetaData>;
             std::vector<Check*> _checks;
             DataType* _data;
             boost::dynamic_bitset<> _posMask;           // mark checks that should be true
@@ -21,19 +21,19 @@ namespace decision_tree {
         };
     }
 
-    template<typename MetaData, typename DataType>
+    template<typename MetaData, typename MetaDataUtil, typename DataType>
     struct Rule
     {
-        using Check = typename MetaData::Check;
+        using Check = typename details::Check<MetaData>;
         using CheckT = typename MetaData::CheckT;
-        friend class DecisionTree<MetaData, DataType>;
+        friend class DecisionTree<MetaData, MetaDataUtil, DataType>;
 
     public:
         ~Rule()
         {
             for (auto check : _checks)
             {
-                MetaData::free(check);
+                MetaDataUtil::freeCheck(check);
                 check = nullptr;
             }
         }
@@ -54,7 +54,7 @@ namespace decision_tree {
         template<typename Target>
         Check* buildCheck(bool(* checker_)(const CheckT&, std::conditional_t<std::is_compound_v<Target>, const Target&, Target>), const Target& target_)
         {
-            return MetaData::buildCheck(checker_, target_);
+            return MetaDataUtil::buildCheck(checker_, target_);
         }
 
         std::vector<Check*> _checks;

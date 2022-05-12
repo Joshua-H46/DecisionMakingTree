@@ -7,10 +7,10 @@
 #include <unordered_map>
 
 namespace decision_tree {
-    template<typename MetaData, typename ReturnT>
+    template<typename MetaData, typename MetaDataUtil, typename ReturnT>
     class DecisionTree
     {
-        using Check = typename MetaData::Check;
+        using Check = typename details::Check<MetaData>;
         using CheckT = std::decay_t<typename MetaData::CheckT>;
         using RuleType = details::_Rule<MetaData, ReturnT>;
 
@@ -20,21 +20,21 @@ namespace decision_tree {
         {
             for (auto&& iter : _checkerMap) {
                 for (auto check : iter.second) {
-                    MetaData::free(check);
+                    MetaDataUtil::freeCheck(check);
                 }
             }
         }
 
-        void addRule(const Rule<MetaData, ReturnT>& rule_)
+        void addRule(const Rule<MetaData, MetaDataUtil, ReturnT>& rule_)
         {
             RuleType rule;
             for (auto& check : rule_._checks) {
                 auto& checkList = _checkerMap[check->_checker];
                 auto&& iter = std::find_if(checkList.begin(), checkList.end(), [&](const auto& item) {
-                    return MetaData::is_same(check, item);
+                    return MetaDataUtil::is_same(check, item);
                 });
                 if (iter == checkList.end()) {
-                    auto in_check = MetaData::copy(check);
+                    auto in_check = MetaDataUtil::copy(check);
                     checkList.push_back(in_check);
                     rule._checks.push_back(in_check);
                 }
@@ -75,7 +75,7 @@ namespace decision_tree {
             // iterate over all the checks and return data in the hit rules
             boost::dynamic_bitset<> mask(_checks.size());
             for (int i=0; i<_checks.size(); i++) {
-                auto res = MetaData::applyCheck(t, _checks[i]);
+                auto res = MetaDataUtil::applyCheck(t, _checks[i]);
                 mask.set(i, res);
             }
             for (auto& rule : _rules) {

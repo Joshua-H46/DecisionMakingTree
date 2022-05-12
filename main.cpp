@@ -26,9 +26,9 @@ int main()
 
     int *p1 = new int(25), *p2 = new int(28);
     int a = 2, &ra = a;
-    decision_tree::DecisionTree<decision_tree::test::TestMetaData, int> dt;
-    decision_tree::Rule<decision_tree::test::TestMetaData, int> rule1;
-    decision_tree::Rule<decision_tree::test::TestMetaData, int> rule2;
+    decision_tree::DecisionTree<decision_tree::details::TestMetaData, decision_tree::details::MetaDataUtil<decision_tree::details::TestMetaData>, int> dt;
+    decision_tree::Rule<decision_tree::details::TestMetaData, decision_tree::details::MetaDataUtil<decision_tree::details::TestMetaData>, int> rule1;
+    decision_tree::Rule<decision_tree::details::TestMetaData, decision_tree::details::MetaDataUtil<decision_tree::details::TestMetaData>, int> rule2;
     rule1.addCheck(checkInt, a);
     rule1.addCheck(checkInt, 3);
     rule1.addCheck(checkDouble, 2.5);
