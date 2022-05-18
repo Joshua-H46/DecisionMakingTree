@@ -52,7 +52,7 @@ namespace decision_tree {
 
     private:
         template<typename Target>
-        Check* buildCheck(bool(* checker_)(const CheckT&, std::conditional_t<std::is_compound_v<Target>, const Target&, Target>), const Target& target_)
+        Check* buildCheck(bool(* checker_)(const CheckT&, std::conditional_t<!details::utils::pass_by_value_v<Target>, const Target&, Target>), const Target& target_)
         {
             return MetaDataUtil::buildCheck(checker_, target_);
         }

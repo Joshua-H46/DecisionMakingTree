@@ -28,7 +28,7 @@ namespace decision_tree { namespace details {
     };
     // specialization for _Check
     template<typename MetaData, typename Target>
-    struct _Check<MetaData, Target, std::enable_if_t<std::is_fundamental_v<Target> || std::is_pointer_v<Target>>>
+    struct _Check<MetaData, Target, std::enable_if_t<utils::pass_by_value_v<Target>>>
     {
         static_assert(decision_tree::details::utils::has_type<Target, typename MetaData::AllTypes>::value, "TypeName not supported");
         typedef bool(*Checker)(const typename MetaData::CheckT&, Target);
@@ -43,7 +43,7 @@ namespace decision_tree { namespace details {
         // helper function
         static bool is_same(const Check<MetaData>* c1, const Check<MetaData>* c2);     // check if two checks are the same
         template<typename Target>
-        static Check<MetaData>* buildCheck(bool(* checker_)(const typename MetaData::CheckT&, std::conditional_t<std::is_compound_v<Target>, const Target&, Target>), const Target& target_);
+        static Check<MetaData>* buildCheck(bool(* checker_)(const typename MetaData::CheckT&, std::conditional_t<!utils::pass_by_value_v<Target>, const Target&, Target>), const Target& target_);
         static Check<MetaData>* copy(Check<MetaData>* check_);
         static void freeCheck(Check<MetaData>* c);                               // delete a Check object
         static bool applyCheck(const typename MetaData::CheckT& t_, Check<MetaData>* check_);   // do check
@@ -140,10 +140,10 @@ namespace decision_tree { namespace details {
     }
 
 /*  template<typename Target>
-    Check<MetaData>* MetaDataUtil::buildCheck(bool(* checker_)(const MetaData::CheckT&, std::conditional_t<std::is_compound_v<Target>, const Target&, Target>), const Target& target_)*/
+    Check<MetaData>* MetaDataUtil::buildCheck(bool(* checker_)(const MetaData::CheckT&, std::conditional_t<!utils::pass_by_value_v<Target>, const Target&, Target>), const Target& target_)*/
 #define MetaDataUtilBuildCheckImpl(CLASS, TYPE, Seq)        \
     template<typename Target>                               \
-    static Check<CLASS>* buildCheck(bool(* checker_)(const typename CLASS::CheckT&, std::conditional_t<std::is_compound_v<Target>, const Target&, Target>), const Target& target_)  \
+    static Check<CLASS>* buildCheck(bool(* checker_)(const typename CLASS::CheckT&, std::conditional_t<!utils::pass_by_value_v<Target>, const Target&, Target>), const Target& target_)  \
     {                                                       \
         auto check = new _Check<CLASS, std::decay_t<Target>>();  \
         check->_type = CLASS::getTypeName<Target>::value;   \
