@@ -10,7 +10,7 @@ namespace decision_tree {
     template<typename MetaData, typename MetaDataUtil, typename ReturnT>
     class DecisionTree
     {
-        using Check = typename details::Check<MetaData>;
+        using ConditionCheck = typename details::ConditionCheck<MetaData>;
         using CheckT = std::decay_t<typename MetaData::CheckT>;
         using RuleType = details::_Rule<MetaData, ReturnT>;
 
@@ -49,7 +49,7 @@ namespace decision_tree {
         // prepare the decision tree, including setting the bitmasks in all rules
         bool prepare() {
             // prepare the _checks
-            std::unordered_map<Check*, size_t> posMap;
+            std::unordered_map<ConditionCheck*, size_t> posMap;
             _checks.clear();
             _checks.shrink_to_fit();
             for (auto iter : _checkerMap) {
@@ -91,7 +91,7 @@ namespace decision_tree {
 
         /* data */
         std::vector<RuleType> _rules;
-        std::vector<Check*> _checks;             // store all the checks registered
-        std::unordered_map<typename Check::CheckerType, std::list<Check*>> _checkerMap;      // map each function pointer to a list of checks (with same check but different targets)
+        std::vector<ConditionCheck*> _checks;             // store all the checks registered
+        std::unordered_map<typename ConditionCheck::CheckerType, std::list<ConditionCheck*>> _checkerMap;      // map each function pointer to a list of checks (with same check but different targets)
     };
 }

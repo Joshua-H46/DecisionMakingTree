@@ -13,8 +13,8 @@ namespace decision_tree {
         template<typename MetaData, typename DataType>
         struct _Rule
         {
-            using Check = typename details::Check<MetaData>;
-            std::vector<Check*> _checks;
+            using ConditionCheck = typename details::ConditionCheck<MetaData>;
+            std::vector<ConditionCheck*> _checks;
             DataType* _data;
             boost::dynamic_bitset<> _posMask;           // mark checks that should be true
             boost::dynamic_bitset<> _negMask;           // mark checks that should be false
@@ -24,7 +24,7 @@ namespace decision_tree {
     template<typename MetaData, typename MetaDataUtil, typename DataType>
     struct Rule
     {
-        using Check = typename details::Check<MetaData>;
+        using ConditionCheck = typename details::ConditionCheck<MetaData>;
         using CheckT = typename MetaData::CheckT;
         friend class DecisionTree<MetaData, MetaDataUtil, DataType>;
 
@@ -39,7 +39,7 @@ namespace decision_tree {
         }
 
         template<typename CheckerParam, typename Target>
-        Check* addCheck(bool(*checker_)(const CheckT&, CheckerParam), const Target& target_) {
+        ConditionCheck* addCheck(bool(*checker_)(const CheckT&, CheckerParam), const Target& target_) {
             static_assert(std::is_convertible_v<Target, std::decay_t<CheckerParam>> || std::is_same_v<Target, std::decay_t<CheckerParam>>);
             auto check = buildCheck<std::decay_t<CheckerParam>>(checker_, target_);
             _checks.push_back(check);
@@ -52,12 +52,12 @@ namespace decision_tree {
 
     private:
         template<typename Target>
-        Check* buildCheck(bool(* checker_)(const CheckT&, std::conditional_t<!details::utils::pass_by_value_v<Target>, const Target&, Target>), const Target& target_)
+        ConditionCheck* buildCheck(bool(* checker_)(const CheckT&, std::conditional_t<!details::utils::pass_by_value_v<Target>, const Target&, Target>), const Target& target_)
         {
             return MetaDataUtil::buildCheck(checker_, target_);
         }
 
-        std::vector<Check*> _checks;
+        std::vector<ConditionCheck*> _checks;
         DataType* _data;
     };
 }
