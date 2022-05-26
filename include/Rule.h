@@ -46,6 +46,15 @@ namespace decision_tree {
             return check;
         }
 
+        template<typename AttrFunc, typename Target>
+        ConditionCheck* addCompare(AttrFunc attr_, Target target_, details::comp::Op op_) {
+            static_assert(std::is_member_function_pointer_v<AttrFunc>);
+            static_assert(std::is_same_v<details::utils::class_for_mem_func_t<AttrFunc>, CheckT>);
+            auto check = MetaDataUtil::buildCompare(attr_, target_, op_);
+            _checks.push_back(check);
+            return check;
+        }
+
         void setData(DataType* data_) {
             _data = data_;
         }
