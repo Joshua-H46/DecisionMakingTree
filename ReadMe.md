@@ -46,13 +46,13 @@ To use this, first we need to register types we need in the check using ***Regis
 
 ```c++
 RegisterMetaType(Test, int,
-    ((char,         CHAR))
-    ((int,          INT))
-    ((double,       DOUBLE))
+    ((char,         CHAR,           ))
+    ((int,          INT,            ))
+    ((double,       DOUBLE,         ))
     ((std::string,  STRING,         [](const std::string& s1, const std::string& s2) { return s1 == s2; }))
 );
 ```
-Here we define a class `TestMetaData`. The type we want to check is `int`, and four types (`char`, `int`, `double`, `std::string`) are allowed. Each type has a corresponding enum value (`ParamType::CHAR`, `ParamType::INT`, `ParamType::DOUBLE`, `ParamType::STRING`). And for `std::string` we give a self defined equal comparator
+Here we define a class `TestMetaData`. The type we want to check is `int`, and four types (`char`, `int`, `double`, `std::string`) are allowed. Each type has a corresponding enum value (`ParamType::CHAR`, `ParamType::INT`, `ParamType::DOUBLE`, `ParamType::STRING`). And for `std::string` we give a self defined equal comparator. The others with last item unfilled will use `std::equal` for comparing
 
 Then we should define `Rule<MetaData, ReturnT>` objects we need, where `MetaData` is the class defined above and `ReturnT` is the type we want for matching results
 
@@ -66,6 +66,7 @@ rule1.setData(p1);
 ```
 
 Here we use `Rule::addCheck` to attach `Checks` to `Rule` object. A `ConditionCheck` object contains two key members: a pointer to a check function and a corresponding argument which would be passed in the function when applying check. As we can see, `addCheck` is made a function template to handle different types of arguments. 
+Beside `Rule::addCheck`, another interface `Rule::addCompare` is also supported to compare the result of a given attribute function and the target 
 And we can set the returned data using `Rule::setData` (a pointer is passed in here so we must make sure it's safe to use later)
 
 Then we define a `DecisionTree` object and add the rule to it. Note that the `DecisionTree` and `Rule` should share the same template arguments
