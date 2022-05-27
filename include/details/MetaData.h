@@ -1,6 +1,7 @@
 #pragma once
 #include "Utils.h"
 #include "Compare.h"
+#include "Macro.h"
 #include <tuple>
 #include <functional>
 #include <type_traits>
@@ -75,7 +76,7 @@ namespace decision_tree { namespace details {
     };
 
 /*  tuple of Comparator for each registered type    */
-#define MetaDataMakeCompPair(_, __, x)  boost::hana::make_pair(ParamType::SelectElem_1(_, __, x), BOOST_PP_IF(BOOST_PP_SUB(BOOST_PP_TUPLE_SIZE(x), 2), SelectElem_2(_, __, x), std::equal_to()))
+#define MetaDataMakeCompPair(_, __, x)  boost::hana::make_pair(ParamType::SelectElem_1(_, __, x), BOOST_PP_IF(PP_NARG(SelectElem_2(_, __, x)), SelectElem_2(_, __, x), std::equal_to()))
 #define MetaDataMakeCompPairs(_, __, x) MetaDataMakeCompPair(_, __, x),
 #define MetaDataCompDef(Seq)                    \
     constexpr static auto CompPreds = boost::hana::make_tuple(AllElems(Seq, _, MetaDataMakeCompPair, MetaDataMakeCompPairs));

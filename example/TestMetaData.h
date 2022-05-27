@@ -47,13 +47,14 @@ static bool checkIntP(const Data& d, int* p2)
 }
     
 RegisterMetaType(Test, Data,
-    ((char,         CHAR))
-    ((int,          INT))
-    ((double,       DOUBLE))
+    ((char,         CHAR,           ))
+    ((int,          INT,            ))
+    ((double,       DOUBLE,         ))
     ((std::string,  STRING,         [](const std::string& s1, const std::string& s2) { return s1 == s2; }))
-    ((Tint,         TINT))
+    ((Tint,         TINT,           ))
     ((int*,         INTP,           [](const int* p1, const int* p2) { return p1 != nullptr && p2 != nullptr && *p1 == *p2; }))
 );
+
 
 namespace decision_tree { namespace details {
 
