@@ -1,13 +1,52 @@
 #pragma once
-// #include "../include/details/MetaData.h"
-#include <DecisionTree/details/MetaData.h>
+#include "../include/details/MetaData.h"
+// #include <DecisionTree/details/MetaData.h>
 
 enum Tint
 {
     INT = 4
 };
+
+struct Data 
+{
+    int id = 1001;
+    int ival = 2;
+    double dval = 2.5;
+    std::string sval = "ass";
+
+    int getI() const { return ival; }
+    double getD() const { return dval; }
+    const std::string& getS() const { return sval; }
+};
+
+static bool checkInt(const Data& d, int q2)
+{
+    return d.getI() <= q2;
+}
+
+static bool checkDouble(const Data& d, double p2)
+{
+    return d.getD() < p2;
+}
+
+static bool checkString(const Data& d, const std::string& s)
+{
+    return s.size() <= d.getS().size();
+}
+
+static bool checkEnum(const Data& d, Tint t)
+{
+    return d.getD() <= (int)t;
+}
+
+static bool checkIntP(const Data& d, int* p2)
+{
+    if (p2 == nullptr)
+        return false;
+    return d.getD() <= *p2;
+}
     
-RegisterMetaType(Test, int,
+RegisterMetaType(Test, Data,
     ((char,         CHAR))
     ((int,          INT))
     ((double,       DOUBLE))
@@ -28,7 +67,7 @@ namespace decision_tree { namespace details {
 /*    struct TestMetaData
     {
         // get CheckT from Register macro. This is the type of objects that need to be checked
-        using CheckT = int;
+        using CheckT = Data;
 
         // enum of all supported types
         enum class ParamType
@@ -61,10 +100,22 @@ namespace decision_tree { namespace details {
         };
 
         // convert types to type enum
-        template<typename T>
-        struct getTypeName {
-            constexpr static auto value = ParamType::VOID;
-        };
+        template<typename Type>
+        static constexpr ParamType getTypeName() {
+            if constexpr (std::is_same_v<Type, char>) {
+                return ParamType::CHAR;
+            }
+            if constexpr (std::is_same_v<Type, int>) {
+                return ParamType::INT;
+            }
+            if constexpr (std::is_same_v<Type, double>) {
+                return ParamType::DOUBLE;
+            }
+            if constexpr (std::is_same_v<Type, std::string>) {
+                return ParamType::STRING;
+            }
+            return ParamType::VOID;
+        }
     };
 
     // specializations for MetaData::getType
@@ -85,31 +136,13 @@ namespace decision_tree { namespace details {
         using type = std::string;
     };
 
-    // // specializations for getTypeName
-    template<>
-    struct TestMetaData::getTypeName<char> {
-        constexpr static auto value = TestMetaData::ParamType::CHAR;
-    };
-    template<>
-    struct TestMetaData::getTypeName<int> {
-        constexpr static auto value = TestMetaData::ParamType::INT;
-    };
-    template<>
-    struct TestMetaData::getTypeName<double> {
-        constexpr static auto value = TestMetaData::ParamType::DOUBLE;
-    };
-    template<>
-    struct TestMetaData::getTypeName<std::string> {
-        constexpr static auto value = TestMetaData::ParamType::STRING;
-    };
-
     template<>
     struct MetaDataUtil<TestMetaData>
     {
         static bool is_same(const ConditionCheck<TestMetaData>* c1, const ConditionCheck<TestMetaData>* c2) {
-            if (c1->_type != c2->_type || c1->_checker != c2->_checker)
+            if (c1->_targetType != c2->_targetType || c1->_checker != c2->_checker || c1->_attr != c2->_attr)
                 return false;
-            switch (c1->_type)
+            switch (c1->_targetType)
             {
                 case TestMetaData::ParamType::CHAR:
                 {
@@ -139,25 +172,37 @@ namespace decision_tree { namespace details {
         }
 
         template<typename Target>
-        static ConditionCheck<TestMetaData>* buildCheck(bool(*checker_)(const typename TestMetaData::CheckT&, std::conditional_t<std::is_compound_v<Target> && !std::is_enum_v<Target>, const Target&, Target>), const Target& target_)
+        static ConditionCheck<TestMetaData>* buildCheck(bool(*checker_)(const typename TestMetaData::CheckT&, std::conditional_t<!utils::pass_by_value_v<Target>, const Target&, Target>), const Target& target_)
         {
             auto check = new _ConditionCheck<TestMetaData, std::decay_t<Target>>();
-            check->_type = TestMetaData::getTypeName<Target>::value;
-            check->_checker = checker_;
+            check->_targetType = TestMetaData::getTypeName<Target>();
+            check->_checker._userChecker = checker_;
             check->_data = target_;
+            return (ConditionCheck<TestMetaData>*)check;
+        }
+
+        template<typename Target, typename Op>
+        static ConditionCheck<TestMetaData>* buildCompare(details::utils::member_attr_func_t<TestMetaData::CheckT, std::conditional_t<!utils::pass_by_value_v<Target>, const Target&, Target>> attr_, const Target& target_, Op)
+        {
+            auto check = new _ConditionCheck<TestMetaData, std::decay_t<Target>>();
+            check->_targetType = TestMetaData::getTypeName<Target>();
+            check->_data = target_;
+            check->_checker._comp = &comp::compare<Target, Op>;
+            check->_attr = attr_;
             return (ConditionCheck<TestMetaData>*)check;
         }
 
         static ConditionCheck<TestMetaData>* copy(ConditionCheck<TestMetaData>* check_)
         {
-            switch (check_->_type)
+            switch (check_->_targetType)
             {
             case TestMetaData::ParamType::CHAR:
             {
                 using type = TestMetaData::getType<TestMetaData::ParamType::CHAR>::type;
                 auto in_check = new _ConditionCheck<TestMetaData, type>();
-                in_check->_type = check_->_type;
-                in_check->_checker = (typename _ConditionCheck<TestMetaData, type>::Checker)check_->_checker;
+                in_check->_targetType = check_->_targetType;
+                in_check->_attr = (typename _ConditionCheck<TestMetaData, type>::AttrFunc)check_->_attr;
+                memcpy(in_check->_checker._checkerData, &check_->_checker, sizeof(check_->_checker));
                 in_check->_data = *((type*)check_->_data);
                 return (ConditionCheck<TestMetaData>*)in_check;
                 break;
@@ -166,8 +211,9 @@ namespace decision_tree { namespace details {
             {
                 using type = TestMetaData::getType<TestMetaData::ParamType::INT>::type;
                 auto in_check = new _ConditionCheck<TestMetaData, type>();
-                in_check->_type = check_->_type;
-                in_check->_checker = (typename _ConditionCheck<TestMetaData, type>::Checker)check_->_checker;
+                in_check->_targetType = check_->_targetType;
+                in_check->_attr = (typename _ConditionCheck<TestMetaData, type>::AttrFunc)check_->_attr;
+                memcpy(in_check->_checker._checkerData, &check_->_checker, sizeof(check_->_checker));
                 in_check->_data = *((type*)check_->_data);
                 return (ConditionCheck<TestMetaData>*)in_check;
                 break;
@@ -176,8 +222,9 @@ namespace decision_tree { namespace details {
             {
                 using type = TestMetaData::getType<TestMetaData::ParamType::DOUBLE>::type;
                 auto in_check = new _ConditionCheck<TestMetaData, type>();
-                in_check->_type = check_->_type;
-                in_check->_checker = (typename _ConditionCheck<TestMetaData, type>::Checker)check_->_checker;
+                in_check->_targetType = check_->_targetType;
+                in_check->_attr = (typename _ConditionCheck<TestMetaData, type>::AttrFunc)check_->_attr;
+                memcpy(in_check->_checker._checkerData, &check_->_checker, sizeof(check_->_checker));
                 in_check->_data = *((type*)check_->_data);
                 return (ConditionCheck<TestMetaData>*)in_check;
                 break;
@@ -186,8 +233,9 @@ namespace decision_tree { namespace details {
             {
                 using type = TestMetaData::getType<TestMetaData::ParamType::STRING>::type;
                 auto in_check = new _ConditionCheck<TestMetaData, type>();
-                in_check->_type = check_->_type;
-                in_check->_checker = (typename _ConditionCheck<TestMetaData, type>::Checker)check_->_checker;
+                in_check->_targetType = check_->_targetType;
+                in_check->_attr = (typename _ConditionCheck<TestMetaData, type>::AttrFunc)check_->_attr;
+                memcpy(in_check->_checker._checkerData, &check_->_checker, sizeof(check_->_checker));
                 in_check->_data = *((type*)check_->_data);
                 return (ConditionCheck<TestMetaData>*)in_check;
                 break;
@@ -198,7 +246,7 @@ namespace decision_tree { namespace details {
 
         static void freeCheck(ConditionCheck<TestMetaData>* check_)
         {
-            switch (check_->_type) {
+            switch (check_->_targetType) {
                 case TestMetaData::ParamType::CHAR:
                 {
                     // std::cout << "Clear _ConditionCheck<CheckT, char>\n";
@@ -232,39 +280,66 @@ namespace decision_tree { namespace details {
 
         static bool applyCheck(const typename TestMetaData::CheckT& t_, ConditionCheck<TestMetaData>* check_)
         {
-            switch (check_->_type)
+            switch (check_->_targetType)
             {
             case TestMetaData::ParamType::CHAR:
             {
                 using type = TestMetaData::getType<TestMetaData::ParamType::CHAR>::type;
-                using Checker = typename _ConditionCheck<TestMetaData, type>::Checker;
-                return ((Checker)check_->_checker)(t_, *((type*)check_->_data));
+                if (check_->_attr == nullptr) {
+                    using Checker = typename _ConditionCheck<TestMetaData, type>::Checker;
+                    return details::utils::proxy_call((Checker)check_->_checker, t_, *((type*)check_->_data));
+                }
+                else {
+                    using Checker = typename _ConditionCheck<TestMetaData, type>::Comp;
+                    auto attrfunc = (_ConditionCheck<TestMetaData, type>::AttrFunc)check_->_attr;
+                    return details::utils::proxy_call_with_attribute((Checker)check_->_checker, t_, attrfunc, *((type*)check_->_data));
+                }
                 break;
             }
             case TestMetaData::ParamType::DOUBLE:
             {
                 using type = TestMetaData::getType<TestMetaData::ParamType::DOUBLE>::type;
-                using Checker = typename _ConditionCheck<TestMetaData, type>::Checker;
-                return ((Checker)check_->_checker)(t_, *((type*)check_->_data));
+                if (check_->_attr == nullptr) {
+                    using Checker = typename _ConditionCheck<TestMetaData, type>::Checker;
+                    return details::utils::proxy_call((Checker)check_->_checker, t_, *((type*)check_->_data));
+                }
+                else {
+                    using Checker = typename _ConditionCheck<TestMetaData, type>::Comp;
+                    auto attrfunc = (_ConditionCheck<TestMetaData, type>::AttrFunc)check_->_attr;
+                    return details::utils::proxy_call_with_attribute((Checker)check_->_checker, t_, attrfunc, *((type*)check_->_data));
+                }
                 break;
             }
             case TestMetaData::ParamType::INT:
             {
                 using type = TestMetaData::getType<TestMetaData::ParamType::INT>::type;
-                using Checker = typename _ConditionCheck<TestMetaData, type>::Checker;
-                return ((Checker)check_->_checker)(t_, *((type*)check_->_data));
+                if (check_->_attr == nullptr) {
+                    using Checker = typename _ConditionCheck<TestMetaData, type>::Checker;
+                    return details::utils::proxy_call((Checker)check_->_checker, t_, *((type*)check_->_data));
+                }
+                else {
+                    using Checker = typename _ConditionCheck<TestMetaData, type>::Comp;
+                    auto attrfunc = (_ConditionCheck<TestMetaData, type>::AttrFunc)check_->_attr;
+                    return details::utils::proxy_call_with_attribute((Checker)check_->_checker, t_, attrfunc, *((type*)check_->_data));
+                }
                 break;
             }
             case TestMetaData::ParamType::STRING:
             {
                 using type = TestMetaData::getType<TestMetaData::ParamType::STRING>::type;
-                using Checker = typename _ConditionCheck<TestMetaData, type>::Checker;
-                return ((Checker)check_->_checker)(t_, *((type*)check_->_data));
+                if (check_->_attr == nullptr) {
+                    using Checker = typename _ConditionCheck<TestMetaData, type>::Checker;
+                    return details::utils::proxy_call((Checker)check_->_checker, t_, *((type*)check_->_data));
+                }
+                else {
+                    using Checker = typename _ConditionCheck<TestMetaData, type>::Comp;
+                    auto attrfunc = (_ConditionCheck<TestMetaData, type>::AttrFunc)check_->_attr;
+                    return details::utils::proxy_call_with_attribute((Checker)check_->_checker, t_, attrfunc, *((type*)check_->_data));
+                }
                 break;
             }
             }
             return false;
         }
-    };
-*/
+    };*/
 }}
