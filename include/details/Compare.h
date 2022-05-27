@@ -3,51 +3,34 @@
 
 namespace decision_tree { namespace details { namespace comp {
 
-    enum class Op {
-        Invalid,
-        Greater,
-        Less,
-        GreaterEqual,
-        LessEqual,
-        Equal,
-        In,
-        NotIn
-    };
-
-    template<typename T>
-    bool compare(const T& t1_, const T& t2_, Op op_) {
-        switch (op_)
-        {
-        case Op::Equal:
-            return t1_ == t2_;
-        case Op::Greater:
-            return t1_ > t2_;
-        case Op::GreaterEqual:
-            return t1_ >= t2_;
-        case Op::Less:
-            return t1_ < t2_;
-        case Op::LessEqual:
-            return t1_ <= t2_;
-        default:
-            assert(false && "Op not supported");
-            break;
-        }
-        return false;
+    namespace Operator {
+        struct Greater {};
+        struct GreaterEqual {};
+        struct Less {};
+        struct LessEqual {};
+        struct Equal {};
     }
 
-    template<typename T, template<typename _T> typename Range>
-    bool compare(const T& t_, const Range<T>& range_, Op op_) {
-        auto&& iter = range_.find(t_);
-        switch (op_)
-        {
-        case Op::In:
-            return iter != range_.end();
-        case Op::NotIn:
-            return iter == range_.end();
-        default:
-            assert(false && "Op not supported");
-            break;
+    template<typename T, typename Op>
+    bool compare(const T& t1_, const T& t2_) {
+        if constexpr (std::is_same_v<Op, Operator::Equal>) {
+            return t1_ == t2_;
         }
-        return false;
+        if constexpr (std::is_same_v<Op, Operator::Greater>) {
+            return t1_ > t2_;
+        }
+        if constexpr (std::is_same_v<Op, Operator::GreaterEqual>) {
+            return t1_ >= t2_;
+        }
+        if constexpr (std::is_same_v<Op, Operator::Less>) {
+            return t1_ < t2_;
+        }
+        if constexpr (std::is_same_v<Op, Operator::LessEqual>) {
+            return t1_ <= t2_;
+        }
+        else {
+            assert(false && "Should never be here");
+            return false;
+        }
     }
 }}}

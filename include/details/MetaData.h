@@ -16,7 +16,6 @@ namespace decision_tree { namespace details {
         using CheckerType = bool(*)(void);      // a generic function pointer type
         using AttrFunc = utils::member_attr_func_t<CheckT, void>;
 
-        comp::Op _op{comp::Op::Invalid};
         typename MetaData::ParamType _targetType{MetaData::ParamType::VOID};
         AttrFunc _attr{nullptr};
         CheckerType _checker;
@@ -29,10 +28,9 @@ namespace decision_tree { namespace details {
         using CheckT = std::decay_t<typename MetaData::CheckT>;
         static_assert(decision_tree::details::utils::has_type<Target, typename MetaData::AllTypes>::value, "Target type not supported");
         using Checker = bool(*)(const typename MetaData::CheckT&, std::conditional_t<utils::pass_by_value_v<Target>, Target, const Target&>);      // std::decay first?
-        using Comp = bool(*)(const Target&, const Target&, comp::Op);
+        using Comp = bool(*)(const Target&, const Target&);
         using AttrFunc = utils::member_attr_func_t<CheckT, std::conditional_t<utils::pass_by_value_v<Target>, Target, const Target&>>;
 
-        comp::Op _op{comp::Op::Invalid};
         typename MetaData::ParamType _targetType{MetaData::ParamType::VOID};
         AttrFunc _attr{nullptr};
         union {
@@ -130,7 +128,7 @@ namespace decision_tree { namespace details {
 #define IsSameDefaultCase(CLASS)
 #define MetaDataUtilIsSameImpl(CLASS, TYPE, Seq)    \
     static bool is_same(const ConditionCheck<CLASS>* c1, const ConditionCheck<CLASS>* c2) {       \
-        if (c1->_targetType != c2->_targetType || c1->_checker != c2->_checker || c1->_attr != c2->_attr || c1->_op != c2->_op) \
+        if (c1->_targetType != c2->_targetType || c1->_checker != c2->_checker || c1->_attr != c2->_attr) \
             return false;                                                       \
         switch (c1->_targetType)                                                      \
         {                                                                       \
@@ -153,16 +151,15 @@ namespace decision_tree { namespace details {
     }
 
 /*  template<typename Target>
-    ConditionCheck<MetaData>* buildCompare(details::utils::member_attr_func_t<TestMetaData::CheckT, std::conditional_t<!utils::pass_by_value_v<Target>, const Target&, Target>> attr_, const Target& target_, details::comp::Op op_)   */
+    ConditionCheck<MetaData>* buildCompare(details::utils::member_attr_func_t<TestMetaData::CheckT, std::conditional_t<!utils::pass_by_value_v<Target>, const Target&, Target>> attr_, const Target& target_)   */
 #define MetaDataUtilBuildCompareImpl(CLASS, TYPE, Seq)      \
-    template<typename Target>                               \
-    static ConditionCheck<CLASS>* buildCompare(details::utils::member_attr_func_t<CLASS::CheckT, std::conditional_t<!utils::pass_by_value_v<Target>, const Target&, Target>> attr_, const Target& target_, details::comp::Op op_)  \
+    template<typename Target, typename Op>                  \
+    static ConditionCheck<CLASS>* buildCompare(details::utils::member_attr_func_t<CLASS::CheckT, std::conditional_t<!utils::pass_by_value_v<Target>, const Target&, Target>> attr_, const Target& target_, Op op_)  \
     {                                                       \
         auto check = new _ConditionCheck<CLASS, std::decay_t<Target>>();    \
         check->_targetType = CLASS::getTypeName<Target>();  \
-        check->_op = op_;                                   \
         check->_data = target_;                             \
-        check->_checker._comp = &comp::compare<Target>;     \
+        check->_checker._comp = &comp::compare<Target, Op>; \
         check->_attr = attr_;                               \
         return (ConditionCheck<CLASS>*)check;               \
     }
@@ -174,7 +171,6 @@ namespace decision_tree { namespace details {
         using type = CLASS::getType<CLASS::ParamType::SelectElem_1(_, _, x)>::type;    \
         auto in_check = new _ConditionCheck<CLASS, type>(); \
         in_check->_targetType = check_->_targetType;        \
-        in_check->_op = check_->_op;                        \
         in_check->_attr = (typename _ConditionCheck<CLASS, type>::AttrFunc)check_->_attr;       \
         memcpy(in_check->_checker._checkerData, &check_->_checker, sizeof(check_->_checker));   \
         in_check->_data = *((type*)check_->_data);          \
@@ -214,14 +210,14 @@ namespace decision_tree { namespace details {
     case CLASS::ParamType::SelectElem_1(_,_,x):             \
     {                                                       \
         using type = CLASS::getType<CLASS::ParamType::SelectElem_1(_,_,x)>::type;           \
-        if (check_->_op == details::comp::Op::Invalid) {    \
+        if (check_->_attr == nullptr) {                     \
             using Checker = typename _ConditionCheck<CLASS, type>::Checker;                 \
             return details::utils::proxy_call((Checker)check_->_checker, t_, *((type*)check_->_data));  \
         }                                                   \
         else {                                              \
             using Checker = typename _ConditionCheck<CLASS, type>::Comp;                    \
             auto attrfunc = (_ConditionCheck<CLASS, type>::AttrFunc)check_->_attr;          \
-            return details::utils::proxy_call_with_attribute((Checker)check_->_checker, t_, attrfunc, *((type*)check_->_data), check_->_op);    \
+            return details::utils::proxy_call_with_attribute((Checker)check_->_checker, t_, attrfunc, *((type*)check_->_data));    \
         }                                                   \
         break;                                              \
     }
@@ -230,7 +226,7 @@ namespace decision_tree { namespace details {
 #define MetaDataUtilApplyImpl(CLASS, TYPE, Seq)             \
     static bool applyCheck(const typename CLASS::CheckT& t_, ConditionCheck<CLASS>* check_)  \
     {                                                       \
-        switch (check_->_targetType)                              \
+        switch (check_->_targetType)                        \
         {                                                   \
             MetaDataTypeEnumSwitchCase(CLASS, Seq, MetaDataApplyNormalCase, MetaDataApplyDefaultCase)   \
         }                                                   \

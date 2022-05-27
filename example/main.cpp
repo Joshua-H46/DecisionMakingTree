@@ -21,10 +21,10 @@ int main()
     rule1.addCheck(checkInt, 3);
     rule1.addCheck(checkDouble, 2.8);
     rule1.addCheck(checkString, "as");
-    rule1.addCompare(&Data::getI, 2, decision_tree::details::comp::Op::LessEqual);
-    rule1.addCompare(&Data::getI, 2, decision_tree::details::comp::Op::GreaterEqual);
-    rule1.addCompare(&Data::getS, std::string("ass"), decision_tree::details::comp::Op::Equal);
-    rule1.addCompare(&Data::getD, 1.8, decision_tree::details::comp::Op::Greater);
+    rule1.addCompare(&Data::getI, 2, decision_tree::details::comp::Operator::LessEqual{});
+    rule1.addCompare(&Data::getI, 2, decision_tree::details::comp::Operator::GreaterEqual{});
+    rule1.addCompare(&Data::getS, std::string("ass"), decision_tree::details::comp::Operator::Equal{});
+    rule1.addCompare(&Data::getD, 1.8, decision_tree::details::comp::Operator::Greater{});
     rule1.setData(&d1);
     rule2.addCheck(checkInt, 2);
     rule2.addCheck(checkDouble, 2.6);
