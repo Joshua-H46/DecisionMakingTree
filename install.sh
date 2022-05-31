@@ -1,4 +1,4 @@
 #!/bin/bash
 
-mkdir /usr/include/DecisionTree
+mkdir -p /usr/include/DecisionTree
 cp -r ./include/* /usr/include/DecisionTree/
