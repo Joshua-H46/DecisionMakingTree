@@ -16,7 +16,7 @@ namespace decision_tree {
         {
             using ConditionCheck = typename details::ConditionCheck<MetaData>;
             std::vector<ConditionCheck*> _checks;
-            DataType* _data;
+            DataType _data;
             boost::dynamic_bitset<> _posMask;           // mark checks that should be true
             boost::dynamic_bitset<> _negMask;           // mark checks that should be false
         };
@@ -60,7 +60,7 @@ namespace decision_tree {
             return check;
         }
 
-        void setData(DataType* data_) {
+        void setData(DataType data_) {
             _data = data_;
         }
 
@@ -72,6 +72,6 @@ namespace decision_tree {
         }
 
         std::vector<ConditionCheck*> _checks;
-        DataType* _data;
+        DataType _data;
     };
 }

@@ -71,7 +71,7 @@ namespace decision_tree {
             return true;
         }
 
-        void apply(const CheckT& t, std::vector<ReturnT*>& ret) {
+        void apply(const CheckT& t, std::vector<ReturnT>& ret) {
             // iterate over all the checks and return data in the hit rules
             boost::dynamic_bitset<> mask(_checks.size());
             for (int i=0; i<_checks.size(); i++) {

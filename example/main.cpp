@@ -14,9 +14,9 @@ int main()
     int *i1 = new int(3), *i2 = new int(4);
     Data d1, d2;
     d2.id = 1002;
-    decision_tree::DecisionTree<decision_tree::details::TestMetaData, decision_tree::details::MetaDataUtil<decision_tree::details::TestMetaData>, Data> dt;
-    decision_tree::Rule<decision_tree::details::TestMetaData, decision_tree::details::MetaDataUtil<decision_tree::details::TestMetaData>, Data> rule1;
-    decision_tree::Rule<decision_tree::details::TestMetaData, decision_tree::details::MetaDataUtil<decision_tree::details::TestMetaData>, Data> rule2;
+    decision_tree::DecisionTree<decision_tree::details::TestMetaData, decision_tree::details::MetaDataUtil<decision_tree::details::TestMetaData>, Data*> dt;
+    decision_tree::Rule<decision_tree::details::TestMetaData, decision_tree::details::MetaDataUtil<decision_tree::details::TestMetaData>, Data*> rule1;
+    decision_tree::Rule<decision_tree::details::TestMetaData, decision_tree::details::MetaDataUtil<decision_tree::details::TestMetaData>, Data*> rule2;
     rule1.addCheck(checkInt, 2);
     rule1.addCheck(checkInt, 3);
     rule1.addCheck(checkDouble, 2.8);
