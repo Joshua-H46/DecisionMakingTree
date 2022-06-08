@@ -17,28 +17,29 @@ namespace decision_tree { namespace details {
         using CheckerType = bool(*)(void);      // a generic function pointer type
         using AttrFunc = utils::member_attr_func_t<CheckT, void>;
 
+        CheckType _type;
         typename MetaData::ParamType _targetType{MetaData::ParamType::VOID};
         AttrFunc _attr{nullptr};
         CheckerType _checker;
         char _data[8];                          // a generic data pointer
     };
-    // class template that handles different Checks
-    template<typename MetaData, typename Target>
+
+    template<typename MetaData, typename Target, CheckType Type>
     struct _ConditionCheck
     {
+        static_assert(decision_tree::details::utils::has_type<std::decay_t<Target>, typename MetaData::AllTypes>::value, "Target type not registered");
         using CheckT = std::decay_t<typename MetaData::CheckT>;
-        static_assert(decision_tree::details::utils::has_type<Target, typename MetaData::AllTypes>::value, "Target type not supported");
-        using Checker = bool(*)(const typename MetaData::CheckT&, std::conditional_t<utils::pass_by_value_v<Target>, Target, const Target&>);      // std::decay first?
-        using Comp = bool(*)(const Target&, const Target&);
-        using AttrFunc = utils::member_attr_func_t<CheckT, std::conditional_t<utils::pass_by_value_v<Target>, Target, const Target&>>;
+        using Attribute = utils::select_t<utils::Cond<Type == CheckType::CustomCheck, CheckT>,
+                                          utils::Cond<Type == CheckType::AttributeCheck, Target>,
+                                          utils::Cond<Type == CheckType::RangeCheck, utils::get_containee_t<Target>>,
+                                          void>;
+        using Checker = bool(*)(typename MetaData::template ArgType<Attribute>, typename MetaData::template ArgType<Target>);
+        using AttrFunc = utils::member_attr_func_t<CheckT, typename MetaData::template ArgType<Attribute>>;
 
+        CheckType _type = Type;
         typename MetaData::ParamType _targetType{MetaData::ParamType::VOID};
         AttrFunc _attr{nullptr};
-        union {
-            char _checkerData[1];
-            Checker _userChecker;
-            Comp _comp;
-        } _checker;
+        Checker _checker;
         Target _data;           // the data we use in the check
     };
 
@@ -48,7 +49,7 @@ namespace decision_tree { namespace details {
         // helper function
         static bool is_same(const ConditionCheck<MetaData>* c1, const ConditionCheck<MetaData>* c2);     // check if two checks are the same
         template<typename Target>
-        static ConditionCheck<MetaData>* buildCheck(bool(* checker_)(const typename MetaData::CheckT&, std::conditional_t<!utils::pass_by_value_v<Target>, const Target&, Target>), const Target& target_);
+        static ConditionCheck<MetaData>* buildCheck(bool(* checker_)(typename MetaData::CheckTArg, typename MetaData::template ArgType<Target>), const Target& target_);
         static ConditionCheck<MetaData>* copy(ConditionCheck<MetaData>* check_);
         static void freeCheck(ConditionCheck<MetaData>* c);                               // delete a ConditionCheck object
         static bool applyCheck(const typename MetaData::CheckT& t_, ConditionCheck<MetaData>* check_);   // do check
@@ -91,9 +92,9 @@ namespace decision_tree { namespace details {
     static constexpr ParamType getTypeName() {  \
         AllElems(Seq, Type, MetaDataGetTypeNameImpl, MetaDataGetTypeNameImpl)   \
     }
+
 /*  MetaData class body impl    */
 #define MetaDataBodyImpl(Type, Seq)                                 \
-    using CheckT = Type;                                            \
     using AllTypes = std::tuple<AllElems(Seq, _, SelectElem_0, SelectElems_0)>;  \
     MetaDataTypeEnumDef(Seq)                                        \
     MetaDataCompDef(Seq)                                            \
@@ -102,7 +103,15 @@ namespace decision_tree { namespace details {
     template<ParamType t>                                           \
     struct getType {                                                \
         using type = void;                                          \
-    };
+    };                                                              \
+    template<typename T>                                            \
+    struct passByValue {                                            \
+        static constexpr bool value = !std::is_class_v<T>;          \
+    };                                                              \
+    template<typename T>                                            \
+    using ArgType = std::conditional_t<passByValue<T>::value, T, const T&>;     \
+    using CheckT = Type;                                            \
+    using CheckTArg = ArgType<CheckT>;
 
 /* template struct specification  */
 #define MetaDataGetTypeSpecImpl(_, CLASS, x)                        \
@@ -129,7 +138,7 @@ namespace decision_tree { namespace details {
 #define IsSameDefaultCase(CLASS)
 #define MetaDataUtilIsSameImpl(CLASS, TYPE, Seq)    \
     static bool is_same(const ConditionCheck<CLASS>* c1, const ConditionCheck<CLASS>* c2) {       \
-        if (c1->_targetType != c2->_targetType || c1->_checker != c2->_checker || c1->_attr != c2->_attr) \
+        if (c1->_type != c2->_type || c1->_targetType != c2->_targetType || c1->_checker != c2->_checker || c1->_attr != c2->_attr) \
             return false;                                                       \
         switch (c1->_targetType)                                                      \
         {                                                                       \
@@ -142,11 +151,11 @@ namespace decision_tree { namespace details {
     ConditionCheck<MetaData>* MetaDataUtil::buildCheck(bool(* checker_)(const MetaData::CheckT&, std::conditional_t<!utils::pass_by_value_v<Target>, const Target&, Target>), const Target& target_)*/
 #define MetaDataUtilBuildCheckImpl(CLASS, TYPE, Seq)        \
     template<typename Target>                               \
-    static ConditionCheck<CLASS>* buildCheck(bool(* checker_)(const typename CLASS::CheckT&, std::conditional_t<!utils::pass_by_value_v<Target>, const Target&, Target>), const Target& target_)  \
+    static ConditionCheck<CLASS>* buildCheck(bool(* checker_)(typename CLASS::CheckTArg, typename CLASS::template ArgType<Target>), const Target& target_)  \
     {                                                       \
-        auto check = new _ConditionCheck<CLASS, std::decay_t<Target>>();  \
+        auto check = new _ConditionCheck<CLASS, std::decay_t<Target>, CheckType::CustomCheck>();  \
         check->_targetType = CLASS::getTypeName<Target>();  \
-        check->_checker._userChecker = checker_;            \
+        check->_checker = checker_;                         \
         check->_data = target_;                             \
         return (ConditionCheck<CLASS>*)check;               \
     }
@@ -155,13 +164,23 @@ namespace decision_tree { namespace details {
     ConditionCheck<MetaData>* buildCompare(details::utils::member_attr_func_t<TestMetaData::CheckT, std::conditional_t<!utils::pass_by_value_v<Target>, const Target&, Target>> attr_, const Target& target_)   */
 #define MetaDataUtilBuildCompareImpl(CLASS, TYPE, Seq)      \
     template<typename Target, typename Op>                  \
-    static ConditionCheck<CLASS>* buildCompare(details::utils::member_attr_func_t<CLASS::CheckT, std::conditional_t<!utils::pass_by_value_v<Target>, const Target&, Target>> attr_, const Target& target_, Op op_)  \
+    static ConditionCheck<CLASS>* buildCompare(details::utils::member_attr_func_t<CLASS::CheckT, typename CLASS::ArgType<Target>> attr_, const Target& target_, Op) \
     {                                                       \
-        auto check = new _ConditionCheck<CLASS, std::decay_t<Target>>();    \
+        auto check = new _ConditionCheck<CLASS, Target, CheckType::AttributeCheck>();   \
         check->_targetType = CLASS::getTypeName<Target>();  \
-        check->_data = target_;                             \
-        check->_checker._comp = &comp::compare<Target, Op>; \
         check->_attr = attr_;                               \
+        check->_checker = comp::compare<CLASS, Target, Target, Op>; \
+        check->_data = target_;                             \
+        return (ConditionCheck<CLASS>*)check;               \
+    }                                                       \
+    template<typename Attribute, template<typename... Args> typename Container, typename Op, typename ...Args>  \
+    static ConditionCheck<CLASS>* buildCompare(details::utils::member_attr_func_t<CLASS::CheckT, typename CLASS::ArgType<Attribute>> attr_, const Container<Attribute, Args...>& target_, Op)   \
+    {                                                       \
+        auto check = new _ConditionCheck<CLASS, Container<Attribute, Args...>, CheckType::RangeCheck>();    \
+        check->_targetType = CLASS::getTypeName<Container<Attribute, Args...>>();                           \
+        check->_attr = attr_;                               \
+        check->_checker = &comp::compare<CLASS, Attribute, Container<Attribute, Args...>, Op>;              \
+        check->_data = target_;                             \
         return (ConditionCheck<CLASS>*)check;               \
     }
 
@@ -170,19 +189,39 @@ namespace decision_tree { namespace details {
     case CLASS::ParamType::SelectElem_1(_, _, x):           \
     {                                                       \
         using type = CLASS::getType<CLASS::ParamType::SelectElem_1(_, _, x)>::type;    \
-        auto in_check = new _ConditionCheck<CLASS, type>(); \
-        in_check->_targetType = check_->_targetType;        \
-        in_check->_attr = (typename _ConditionCheck<CLASS, type>::AttrFunc)check_->_attr;       \
-        memcpy(in_check->_checker._checkerData, &check_->_checker, sizeof(check_->_checker));   \
-        in_check->_data = *((type*)check_->_data);          \
-        return (ConditionCheck<CLASS>*)in_check;            \
+        if (check_->_type == CheckType::CustomCheck) {      \
+            return copy_impl<type, CheckType::CustomCheck>(check_);     \
+        }                                                   \
+        else if (check_->_type == CheckType::AttributeCheck) {          \
+            return copy_impl<type, CheckType::AttributeCheck>(check_);  \
+        }                                                   \
+        else if (check_->_type == CheckType::RangeCheck) {  \
+            return copy_impl<type, CheckType::RangeCheck>(check_);      \
+        }                                                   \
         break;                                              \
     }
 #define MetaDataCopyDefaultCase(CLASS)
 #define MetaDataUtilCopyImpl(CLASS, TYPE, Seq)              \
+    template<typename Target, CheckType Type>               \
+    static ConditionCheck<CLASS>* copy_impl(ConditionCheck<CLASS>* check_) {    \
+        if constexpr (Type != CheckType::RangeCheck || utils::is_container<Target>::value)  \
+        {                                                   \
+            auto in_check = new _ConditionCheck<CLASS, Target, Type>();         \
+            in_check->_targetType = check_->_targetType;    \
+            in_check->_attr = (typename _ConditionCheck<CLASS, Target, Type>::AttrFunc)check_->_attr;       \
+            in_check->_checker = (typename _ConditionCheck<CLASS, Target, Type>::Checker)check_->_checker;  \
+            in_check->_data = *((Target*)check_->_data);    \
+            return (ConditionCheck<CLASS>*)in_check;        \
+        }                                                   \
+        else                                                \
+        {                                                   \
+            assert(false && "Target should be container for range check");      \
+            return nullptr;                                 \
+        }                                                   \
+    }                                                       \
     static ConditionCheck<CLASS>* copy(ConditionCheck<CLASS>* check_)         \
     {                                                       \
-        switch (check_->_targetType)                              \
+        switch (check_->_targetType)                        \
         {                                                   \
             MetaDataTypeEnumSwitchCase(CLASS, Seq, MetaDataCopyNormalCase, MetaDataCopyDefaultCase) \
         }                                                   \
@@ -191,17 +230,37 @@ namespace decision_tree { namespace details {
 
 /*  void MetaData::freeCheck(ConditionCheck* check_)  */
 #define MetaDataFreeNormalCase(_, CLASS, x)                 \
-    case CLASS::ParamType::SelectElem_1(_,_,x):              \
+    case CLASS::ParamType::SelectElem_1(_,_,x):             \
     {                                                       \
         using type = CLASS::getType<CLASS::ParamType::SelectElem_1(_,_,x)>::type;      \
-        delete (_ConditionCheck<CLASS, type>*)check_;                \
+        if (check_->_type == CheckType::CustomCheck) {      \
+            freeCheck_impl<type, CheckType::CustomCheck>(check_);       \
+        }                                                   \
+        else if (check_->_type == CheckType::AttributeCheck) {          \
+            freeCheck_impl<type, CheckType::AttributeCheck>(check_);    \
+        }                                                   \
+        else if (check_->_type == CheckType::RangeCheck) {  \
+            freeCheck_impl<type, CheckType::RangeCheck>(check_);        \
+        }                                                   \
         break;                                              \
     }
 #define MetaDataFreeDefaultCase(CLASS)
 #define MetaDataUtilFreeImpl(CLASS, TYPE, Seq)              \
-    static void freeCheck(ConditionCheck<CLASS>* check_)             \
+    template<typename Target, CheckType Type>               \
+    static void freeCheck_impl(ConditionCheck<CLASS>* check_)    \
     {                                                       \
-        switch (check_->_targetType) {                            \
+        if constexpr (Type != CheckType::RangeCheck || utils::is_container<Target>::value)  \
+        {                                                   \
+            delete (_ConditionCheck<CLASS, Target, Type>*) check_;   \
+        }                                                   \
+        else                                                \
+        {                                                   \
+            assert(false && "Target should be container for range check");  \
+        }                                                   \
+    }                                                       \
+    static void freeCheck(ConditionCheck<CLASS>* check_)    \
+    {                                                       \
+        switch (check_->_targetType) {                      \
             MetaDataTypeEnumSwitchCase(CLASS, Seq, MetaDataFreeNormalCase, MetaDataFreeDefaultCase) \
         }                                                   \
     }
@@ -211,20 +270,44 @@ namespace decision_tree { namespace details {
     case CLASS::ParamType::SelectElem_1(_,_,x):             \
     {                                                       \
         using type = CLASS::getType<CLASS::ParamType::SelectElem_1(_,_,x)>::type;           \
-        if (check_->_attr == nullptr) {                     \
-            using Checker = typename _ConditionCheck<CLASS, type>::Checker;                 \
-            return details::utils::proxy_call((Checker)check_->_checker, t_, *((type*)check_->_data));  \
+        if (check_->_type == CheckType::CustomCheck) {      \
+            return applyCheck_impl<type, CheckType::CustomCheck>(t_, check_);               \
         }                                                   \
-        else {                                              \
-            using Checker = typename _ConditionCheck<CLASS, type>::Comp;                    \
-            auto attrfunc = (_ConditionCheck<CLASS, type>::AttrFunc)check_->_attr;          \
-            return details::utils::proxy_call_with_attribute((Checker)check_->_checker, t_, attrfunc, *((type*)check_->_data));    \
+        else if (check_->_type == CheckType::AttributeCheck) {                              \
+            return applyCheck_impl<type, CheckType::AttributeCheck>(t_, check_);            \
+        }                                                   \
+        else if (check_->_type == CheckType::RangeCheck) {  \
+            return applyCheck_impl<type, CheckType::RangeCheck>(t_, check_);                \
         }                                                   \
         break;                                              \
     }
     
 #define MetaDataApplyDefaultCase(CLASS)
 #define MetaDataUtilApplyImpl(CLASS, TYPE, Seq)             \
+    template<typename Target, CheckType Type>               \
+    static bool applyCheck_impl(typename CLASS::CheckTArg t_, ConditionCheck<CLASS>* check_)    \
+    {                                                       \
+        if constexpr (Type != CheckType::RangeCheck || utils::is_container<Target>::value)      \
+        {                                                   \
+            using Checker = typename _ConditionCheck<CLASS, Target, Type>::Checker;             \
+            if constexpr (Type == CheckType::CustomCheck)   \
+            {                                               \
+                return details::utils::proxy_call((Checker)check_->_checker, t_, *((Target*)check_->_data));    \
+            }                                               \
+            else                                            \
+            {                                               \
+                assert(check_->_attr != nullptr && "AttrFunc must not be null");                \
+                using Checker = typename _ConditionCheck<CLASS, Target, Type>::Checker;         \
+                auto attrfunc = (typename _ConditionCheck<CLASS, Target, Type>::AttrFunc)check_->_attr;         \
+                return details::utils::proxy_call_with_attribute((Checker)check_->_checker, t_, attrfunc, *((Target*)check_->_data));   \
+            }                                               \
+        }                                                   \
+        else                                                \
+        {                                                   \
+            assert(false && "Target should be container for range check");                      \
+            return false;                                   \
+        }                                                   \
+    }                                                       \
     static bool applyCheck(const typename CLASS::CheckT& t_, ConditionCheck<CLASS>* check_)  \
     {                                                       \
         switch (check_->_targetType)                        \

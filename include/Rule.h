@@ -27,6 +27,7 @@ namespace decision_tree {
     {
         using ConditionCheck = typename details::ConditionCheck<MetaData>;
         using CheckT = typename MetaData::CheckT;
+        using CheckTArg = typename MetaData::CheckTArg;
         friend class DecisionTree<MetaData, MetaDataUtil, DataType>;
 
     public:
@@ -40,7 +41,7 @@ namespace decision_tree {
         }
 
         template<typename CheckerParam, typename Target>
-        ConditionCheck* addCheck(bool(*checker_)(const CheckT&, CheckerParam), const Target& target_) {
+        ConditionCheck* addCheck(bool(*checker_)(CheckTArg, CheckerParam), const Target& target_) {
             static_assert(std::is_convertible_v<Target, std::decay_t<CheckerParam>> || std::is_same_v<Target, std::decay_t<CheckerParam>>);
             auto check = buildCheck<std::decay_t<CheckerParam>>(checker_, target_);
             _checks.push_back(check);
@@ -66,7 +67,7 @@ namespace decision_tree {
 
     private:
         template<typename Target>
-        ConditionCheck* buildCheck(bool(* checker_)(const CheckT&, std::conditional_t<!details::utils::pass_by_value_v<Target>, const Target&, Target>), const Target& target_)
+        ConditionCheck* buildCheck(bool(* checker_)(CheckTArg, typename MetaData::template ArgType<Target>), const Target& target_)
         {
             return MetaDataUtil::buildCheck(checker_, target_);
         }
