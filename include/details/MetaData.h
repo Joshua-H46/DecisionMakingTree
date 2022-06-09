@@ -2,6 +2,7 @@
 #include "Utils.h"
 #include "Compare.h"
 #include "Macro.h"
+#include "Common.h"
 #include <tuple>
 #include <functional>
 #include <type_traits>
@@ -64,38 +65,52 @@ namespace decision_tree { namespace details {
 #define SelectElems_1(_, __, x)    BOOST_PP_TUPLE_ELEM(BOOST_PP_TUPLE_SIZE(x), 1, x),
 #define SelectElem_2(_, __, x)     BOOST_PP_TUPLE_ELEM(BOOST_PP_TUPLE_SIZE(x), 2, x)
 #define SelectElems_2(_, __, x)    BOOST_PP_TUPLE_ELEM(BOOST_PP_TUPLE_SIZE(x), 2, x),
+#define SelectElem_3(_, __, x)     BOOST_PP_TUPLE_ELEM(BOOST_PP_TUPLE_SIZE(x), 3, x)
+#define SelectElems_3(_, __, x)    BOOST_PP_TUPLE_ELEM(BOOST_PP_TUPLE_SIZE(x), 3, x),
 #define PreviousElems(Seq)      BOOST_PP_IF(BOOST_PP_SUB(BOOST_PP_SEQ_SIZE(Seq), 1), BOOST_PP_SEQ_REMOVE(Seq, BOOST_PP_SUB(BOOST_PP_SEQ_SIZE(Seq), 1)), Seq)
 #define SingleElem(Seq, Data, Elem, _)         BOOST_PP_SEQ_FOR_EACH(Elem, Data, Seq)
 #define MultiElems(Seq, Data, Elem, Elems)     BOOST_PP_SEQ_FOR_EACH(Elems, Data, PreviousElems(Seq)) Elem(_, Data, BOOST_PP_SEQ_ELEM(BOOST_PP_SUB(BOOST_PP_SEQ_SIZE(Seq), 1), Seq))
 #define AllElems(Seq, Data, Elem, Elems)       BOOST_PP_IF(BOOST_PP_SUB(BOOST_PP_SEQ_SIZE(Seq), 1), MultiElems, SingleElem)(Seq, Data, Elem, Elems)
 
 /*  ParamType enum definition    */
-#define MetaDataTypeEnumDef(Seq)                \
-    enum class ParamType {                      \
-        VOID = -1,                              \
-        AllElems(Seq, _, SelectElem_1, SelectElems_1)    \
+#define MetaDataTypeEnumDef(Seq)                            \
+    enum class ParamType {                                  \
+        VOID = -1,                                          \
+        AllElems(Seq, _, SelectElem_1, SelectElems_1)       \
     };
 
+/*  Type tuple definition   */
+#define BuildTuple(NAME, ...)   NAME<__VA_ARGS__>
+#define MetaDataTypeTupleMakeItem(_, DATA, x)   BuildTuple(DATA, SelectElem_0(_, _, x), SelectElem_2(_, _, x))
+#define MetaDataTypeTupleMakeItems(_, DATA, x)  BuildTuple(DATA, SelectElem_0(_, _, x), SelectElem_2(_, _, x)),
+
+#define MetaDataTypeTupleDef(Seq)                           \
+    using AllTypes = std::tuple<AllElems(Seq, _, SelectElem_0, SelectElems_0)>; \
+    using PassByRef = typename utils::PassByRef_helper<AllElems(Seq, utils::PassByItem, MetaDataTypeTupleMakeItem, MetaDataTypeTupleMakeItems)>::type;    \
+    using PassByConst = typename utils::PassByConst_helper<AllElems(Seq, utils::PassByItem, MetaDataTypeTupleMakeItem, MetaDataTypeTupleMakeItems)>::type;
+
+
 /*  tuple of Comparator for each registered type    */
-#define MetaDataMakeCompPair(_, __, x)  boost::hana::make_pair(ParamType::SelectElem_1(_, __, x), BOOST_PP_IF(PP_NARG(SelectElem_2(_, __, x)), SelectElem_2(_, __, x), std::equal_to()))
+#define MetaDataMakeCompPair(_, __, x)  boost::hana::make_pair(ParamType::SelectElem_1(_, __, x), BOOST_PP_IF(PP_NARG(SelectElem_3(_, __, x)), SelectElem_3(_, __, x), std::equal_to()))
 #define MetaDataMakeCompPairs(_, __, x) MetaDataMakeCompPair(_, __, x),
-#define MetaDataCompDef(Seq)                    \
+#define MetaDataCompDef(Seq)                                \
     constexpr static auto CompPreds = boost::hana::make_tuple(AllElems(Seq, _, MetaDataMakeCompPair, MetaDataMakeCompPairs));
     
 /*  constexpr function getTypeName  */
-#define MetaDataGetTypeNameImpl(_, Type, x)            \
+#define MetaDataGetTypeNameImpl(_, Type, x)                 \
     if constexpr (std::is_same_v<Type, SelectElem_0(_, _, x)>) {    \
-        return ParamType::SelectElem_1(_, _, x);    \
+        return ParamType::SelectElem_1(_, _, x);            \
     }
-#define MetaDataGetTypeNameDef(Seq)             \
-    template<typename Type>                     \
-    static constexpr ParamType getTypeName() {  \
+#define MetaDataGetTypeNameDef(Seq)                         \
+    template<typename Type>                                 \
+    static constexpr ParamType getTypeName() {              \
         AllElems(Seq, Type, MetaDataGetTypeNameImpl, MetaDataGetTypeNameImpl)   \
+        return ParamType::VOID;                             \
     }
 
 /*  MetaData class body impl    */
 #define MetaDataBodyImpl(Type, Seq)                                 \
-    using AllTypes = std::tuple<AllElems(Seq, _, SelectElem_0, SelectElems_0)>;  \
+    MetaDataTypeTupleDef(Seq)                                       \
     MetaDataTypeEnumDef(Seq)                                        \
     MetaDataCompDef(Seq)                                            \
     MetaDataGetTypeNameDef(Seq)                                     \
@@ -104,20 +119,28 @@ namespace decision_tree { namespace details {
     struct getType {                                                \
         using type = void;                                          \
     };                                                              \
+    using CheckT = Type;                                            \
     template<typename T>                                            \
-    struct passByValue {                                            \
-        static constexpr bool value = !std::is_class_v<T>;          \
+    struct argConst {                                               \
+        using type = std::conditional_t<utils::has_type<std::decay_t<T>, PassByConst>::value, std::add_const_t<T>, T>;  \
     };                                                              \
     template<typename T>                                            \
-    using ArgType = std::conditional_t<passByValue<T>::value, T, const T&>;     \
-    using CheckT = Type;                                            \
+    using argConst_t = typename argConst<T>::type;                  \
+    template<typename T>                                            \
+    struct argRef {                                                 \
+        using type = std::conditional_t<utils::has_type<std::decay_t<T>, PassByRef>::value, std::add_lvalue_reference_t<T>, T>; \
+    };                                                              \
+    template<typename T>                                            \
+    using argRef_t = typename argRef<T>::type;                      \
+    template<typename T>                                            \
+    using ArgType = argRef_t<argConst_t<T>>;                        \
     using CheckTArg = ArgType<CheckT>;
 
 /* template struct specification  */
 #define MetaDataGetTypeSpecImpl(_, CLASS, x)                        \
     template<>                                                      \
-    struct CLASS::getType<CLASS::ParamType::SelectElem_1(_, _, x)> {     \
-        using type = SelectElem_0(_, _, x);                             \
+    struct CLASS::getType<CLASS::ParamType::SelectElem_1(_, _, x)> {\
+        using type = SelectElem_0(_, _, x);                         \
     };
 
 #define MetaDataSpecificationImpl(CLASS, Seq)               \

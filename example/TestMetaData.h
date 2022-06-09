@@ -36,13 +36,13 @@ static bool checkIntP(const Data& d, int* p2)
 }
     
 RegisterMetaType(Test, Data,
-    ((char,         CHAR,           ))
-    ((int,          INT,            ))
-    ((double,       DOUBLE,         ))
-    ((std::string,  STRING,         [](const std::string& s1, const std::string& s2) { return s1 == s2; }))
-    ((std::vector<int>,     INT_VEC,    ))
+    ((char,         CHAR,           PassBy::Value,          ))
+    ((int,          INT,            PassBy::Default,        ))
+    ((double,       DOUBLE,         PassBy::Default,        ))
+    ((std::string,  STRING,         PassBy::Default,        [](const std::string& s1, const std::string& s2) { return s1 == s2; }))
+    ((std::vector<int>, INT_VEC,    PassBy::ConstRef,       ))
+    ((Data,         DataStruct,     PassBy::ConstRef,       [](const auto& d1, const auto& d2) { return d1.id == d2.id; }))
 );
-
 
 namespace decision_tree { namespace details {
 
@@ -62,11 +62,16 @@ namespace decision_tree { namespace details {
             CHAR,
             INT,
             DOUBLE,
-            STRING
+            STRING,
+            INT_VEC,
+            DataStruct,
         };
 
         // a tuple type made up of all supported types (can be used for static check)
-        using AllTypes = std::tuple<char, int, double, std::string>;
+        using PassByRef = typename utils::PassByRef_helper<utils::PassByItem<char, PassBy::Default>, utils::PassByItem<int, PassBy::Default>, utils::PassByItem<double, PassBy::Default>, utils::PassByItem<std::string, PassBy::Default>, utils::PassByItem<std::vector<int>, PassBy::Default>, utils::PassByItem<Data, PassBy::Default>>::type;
+        using PassByConst = typename utils::PassByConst_helper<utils::PassByItem<char, PassBy::Default>, utils::PassByItem<int, PassBy::Default>, utils::PassByItem<double, PassBy::Default>, utils::PassByItem<std::string, PassBy::Default>, utils::PassByItem<std::vector<int>, PassBy::Default>, utils::PassByItem<Data, PassBy::Default>>::type;
+        using AllTypes = std::tuple<char, int, double, std::string, std::vector<int>, Data>;
+        
         // a constexpr tuple of equal predicate for each type
         constexpr static auto CompPreds = boost::hana::make_tuple(boost::hana::make_pair(ParamType::CHAR, [](char c1, char c2) {
             return c1 = c2;
@@ -77,7 +82,11 @@ namespace decision_tree { namespace details {
         boost::hana::make_pair(ParamType::DOUBLE, [](double d1, double d2) {
             return d1 == d2;
         }),
-        boost::hana::make_pair(ParamType::STRING, std::equal_to()));
+        boost::hana::make_pair(ParamType::STRING, std::equal_to()),
+        boost::hana::make_pair(ParamType::INT_VEC, std::equal_to()),
+        boost::hana::make_pair(ParamType::DataStruct, [](const auto& d1, const auto& d2) {
+            return d1.id == d2.id;
+        }));
 
         // convert const type enum to type (specializations are outside the class body)
         template<ParamType t>
@@ -100,15 +109,29 @@ namespace decision_tree { namespace details {
             if constexpr (std::is_same_v<Type, std::string>) {
                 return ParamType::STRING;
             }
+            if constexpr (std::is_same_v<Type, std::vector<int>>) {
+                return ParamType::INT_VEC;
+            }
+            if constexpr (std::is_same_v<Type, Data>) {
+                return ParamType::DataStruct;
+            }
             return ParamType::VOID;
         }
 
         template<typename T>
-        struct passByValue {
-            static constexpr bool value = !std::is_class_v<T>;
+        struct argConst {
+            using type = std::conditional_t<utils::has_type<std::decay_t<T>, PassByConst>::value, std::add_const_t<T>, T>;
         };
         template<typename T>
-        using ArgType = std::conditional_t<passByValue<T>::value, T, const T&>;
+        using argConst_t = typename argConst<T>::type;
+        template<typename T>
+        struct argRef {
+            using type = std::conditional_t<utils::has_type<std::decay_t<T>, PassByRef>::value, std::add_lvalue_reference_t<T>, T>;
+        };
+        template<typename T>
+        using argRef_t = typename argRef<T>::type;
+        template<typename T>
+        using ArgType = argRef_t<argConst_t<T>>;
         
         // get CheckT from Register macro. This is the type of objects that need to be checked
         using CheckT = Data;
@@ -132,6 +155,14 @@ namespace decision_tree { namespace details {
     struct TestMetaData::getType<TestMetaData::ParamType::STRING> {
         using type = std::string;
     };
+    template<>
+    struct TestMetaData::getType<TestMetaData::ParamType::INT_VEC> {
+        using type = std::vector<int>;
+    };
+    template<>
+    struct TestMetaData::getType<TestMetaData::ParamType::DataStruct> {
+        using type = Data;
+    };
 
     template<>
     struct MetaDataUtil<TestMetaData>
@@ -150,19 +181,26 @@ namespace decision_tree { namespace details {
                 {
                     using type = TestMetaData::getType<TestMetaData::ParamType::INT>::type;
                     return boost::hana::second(boost::hana::at_c<static_cast<int>(TestMetaData::ParamType::INT)>(TestMetaData::CompPreds))((*((type*)c1->_data)), (*((type*)c2->_data)));
-                    return (*((type*)c1->_data)) == (*((type*)c2->_data));
                 }
                 case TestMetaData::ParamType::DOUBLE:
                 {
                     using type = TestMetaData::getType<TestMetaData::ParamType::DOUBLE>::type;
                     return boost::hana::second(boost::hana::at_c<static_cast<int>(TestMetaData::ParamType::DOUBLE)>(TestMetaData::CompPreds))((*((type*)c1->_data)), (*((type*)c2->_data)));
-                    return (*((type*)c1->_data)) == (*((type*)c2->_data));
                 }
                 case TestMetaData::ParamType::STRING:
                 {
                     using type = TestMetaData::getType<TestMetaData::ParamType::STRING>::type;
                     return boost::hana::second(boost::hana::at_c<static_cast<int>(TestMetaData::ParamType::STRING)>(TestMetaData::CompPreds))((*((type*)c1->_data)), (*((type*)c2->_data)));
-                    return (*((type*)c1->_data)) == (*((type*)c2->_data));
+                }
+                case TestMetaData::ParamType::INT_VEC:
+                {
+                    using type = TestMetaData::getType<TestMetaData::ParamType::INT_VEC>::type;
+                    return boost::hana::second(boost::hana::at_c<static_cast<int>(TestMetaData::ParamType::INT_VEC)>(TestMetaData::CompPreds))((*((type*)c1->_data)), (*((type*)c2->_data)));
+                }
+                case TestMetaData::ParamType::DataStruct:
+                {
+                    using type = TestMetaData::getType<TestMetaData::ParamType::DataStruct>::type;
+                    return boost::hana::second(boost::hana::at_c<static_cast<int>(TestMetaData::ParamType::DataStruct)>(TestMetaData::CompPreds))((*((type*)c1->_data)), (*((type*)c2->_data)));
                 }
             }
             return false;
@@ -280,6 +318,34 @@ namespace decision_tree { namespace details {
                 }
                 break;
             }
+            case TestMetaData::ParamType::INT_VEC:
+            {
+                using type = TestMetaData::getType<TestMetaData::ParamType::INT_VEC>::type;
+                if (check_->_type == CheckType::CustomCheck) {
+                    return copy_impl<type, CheckType::CustomCheck>(check_);
+                }
+                else if (check_->_type == CheckType::AttributeCheck) {
+                    return copy_impl<type, CheckType::AttributeCheck>(check_);
+                }
+                else if (check_->_type == CheckType::RangeCheck) {
+                    return copy_impl<type, CheckType::RangeCheck>(check_);
+                }
+                break;
+            }
+            case TestMetaData::ParamType::DataStruct:
+            {
+                using type = TestMetaData::getType<TestMetaData::ParamType::DataStruct>::type;
+                if (check_->_type == CheckType::CustomCheck) {
+                    return copy_impl<type, CheckType::CustomCheck>(check_);
+                }
+                else if (check_->_type == CheckType::AttributeCheck) {
+                    return copy_impl<type, CheckType::AttributeCheck>(check_);
+                }
+                else if (check_->_type == CheckType::RangeCheck) {
+                    return copy_impl<type, CheckType::RangeCheck>(check_);
+                }
+                break;
+            }
             }
             return nullptr;
         }
@@ -344,6 +410,36 @@ namespace decision_tree { namespace details {
                 {
                     // std::cout << "Clear _ConditionCheck<CheckT, std::string>\n";
                     using type = TestMetaData::getType<TestMetaData::ParamType::STRING>::type;
+                    if (check_->_type == CheckType::CustomCheck) {
+                        freeCheck_impl<type, CheckType::CustomCheck>(check_);
+                    }
+                    else if (check_->_type == CheckType::AttributeCheck) {
+                        freeCheck_impl<type, CheckType::AttributeCheck>(check_);
+                    }
+                    else if (check_->_type == CheckType::RangeCheck) {
+                        freeCheck_impl<type, CheckType::RangeCheck>(check_);
+                    }
+                    break;
+                }
+                case TestMetaData::ParamType::INT_VEC:
+                {
+                    // std::cout << "Clear _ConditionCheck<CheckT, std::string>\n";
+                    using type = TestMetaData::getType<TestMetaData::ParamType::INT_VEC>::type;
+                    if (check_->_type == CheckType::CustomCheck) {
+                        freeCheck_impl<type, CheckType::CustomCheck>(check_);
+                    }
+                    else if (check_->_type == CheckType::AttributeCheck) {
+                        freeCheck_impl<type, CheckType::AttributeCheck>(check_);
+                    }
+                    else if (check_->_type == CheckType::RangeCheck) {
+                        freeCheck_impl<type, CheckType::RangeCheck>(check_);
+                    }
+                    break;
+                }
+                case TestMetaData::ParamType::DataStruct:
+                {
+                    // std::cout << "Clear _ConditionCheck<CheckT, std::string>\n";
+                    using type = TestMetaData::getType<TestMetaData::ParamType::DataStruct>::type;
                     if (check_->_type == CheckType::CustomCheck) {
                         freeCheck_impl<type, CheckType::CustomCheck>(check_);
                     }
@@ -432,6 +528,34 @@ namespace decision_tree { namespace details {
             case TestMetaData::ParamType::STRING:
             {
                 using type = TestMetaData::getType<TestMetaData::ParamType::STRING>::type;
+                if (check_->_type == CheckType::CustomCheck) {
+                    return applyCheck_impl<type, CheckType::CustomCheck>(t_, check_);
+                }
+                else if (check_->_type == CheckType::AttributeCheck) {
+                    return applyCheck_impl<type, CheckType::AttributeCheck>(t_, check_);
+                }
+                else if (check_->_type == CheckType::RangeCheck) {
+                    return applyCheck_impl<type, CheckType::RangeCheck>(t_, check_);
+                }
+                break;
+            }
+            case TestMetaData::ParamType::INT_VEC:
+            {
+                using type = TestMetaData::getType<TestMetaData::ParamType::INT_VEC>::type;
+                if (check_->_type == CheckType::CustomCheck) {
+                    return applyCheck_impl<type, CheckType::CustomCheck>(t_, check_);
+                }
+                else if (check_->_type == CheckType::AttributeCheck) {
+                    return applyCheck_impl<type, CheckType::AttributeCheck>(t_, check_);
+                }
+                else if (check_->_type == CheckType::RangeCheck) {
+                    return applyCheck_impl<type, CheckType::RangeCheck>(t_, check_);
+                }
+                break;
+            }
+            case TestMetaData::ParamType::DataStruct:
+            {
+                using type = TestMetaData::getType<TestMetaData::ParamType::DataStruct>::type;
                 if (check_->_type == CheckType::CustomCheck) {
                     return applyCheck_impl<type, CheckType::CustomCheck>(t_, check_);
                 }
