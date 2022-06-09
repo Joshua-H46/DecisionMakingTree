@@ -1,5 +1,4 @@
 #pragma once
-#include "Common.h"
 #include <type_traits>
 #include <utility>
 #include <cassert>
@@ -19,6 +18,20 @@ namespace decision_tree { namespace details { namespace utils {
     struct has_type;
     template <typename T, typename... Us>
     struct has_type<T, std::tuple<Us...>> : std::disjunction<std::is_same<T, Us>...> {};
+
+    /*
+        append type to tuple types
+    */
+    template<typename T, typename Tuple>
+    struct append_tuple;
+    template<typename T, template<typename ...Args> typename Tuple, typename ...Args>
+    struct append_tuple<T, Tuple<Args...>> {
+        using type = Tuple<Args..., T>;
+    };
+    template<typename T, typename Tuple>
+    using append_tuple_t = typename append_tuple<T, Tuple>::type;
+
+    using a = append_tuple_t<int, std::tuple<char, double>>;
 
     /* 
         a compile time switch case
