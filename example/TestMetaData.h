@@ -41,7 +41,6 @@ RegisterMetaType(Test, Data,
     ((double,       DOUBLE,         PassBy::Default,        ))
     ((std::string,  STRING,         PassBy::Default,        [](const std::string& s1, const std::string& s2) { return s1 == s2; }))
     ((std::vector<int>, INT_VEC,    PassBy::ConstRef,       ))
-    ((Data,         DataStruct,     PassBy::ConstRef,       [](const auto& d1, const auto& d2) { return d1.id == d2.id; }))
 );
 
 namespace decision_tree { namespace details {

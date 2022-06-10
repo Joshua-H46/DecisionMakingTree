@@ -62,32 +62,37 @@ namespace decision_tree {
             auto size = _checks.size();
             for (auto& rule : _rules) {
                 rule._posMask.resize(size, 0);
-                rule._negMask.resize(size, 0);
                 for (auto check : rule._checks) {
                     rule._posMask.set(posMap[check], true);
                 }
             }
 
+            _mask.resize(_checks.size(), false);
+            _maskRes.resize(_checks.size(), false);
             return true;
         }
 
         void apply(const CheckT& t, std::vector<ReturnT>& ret) {
             // iterate over all the checks and return data in the hit rules
-            boost::dynamic_bitset<> mask(_checks.size());
+            _mask.reset();
             for (int i=0; i<_checks.size(); i++) {
                 auto res = MetaDataUtil::applyCheck(t, _checks[i]);
-                mask.set(i, res);
+                _mask.set(i, res);
             }
+            _maskRes = _mask;
             for (auto& rule : _rules) {
-                if (((mask & rule._posMask) == rule._posMask) &&
-                    ((~mask & rule._negMask) == rule._negMask))
+                _mask &= rule._posMask;
+                if (_mask == rule._posMask)
                 {
                     ret.push_back(rule._data);
                 }
+                _mask = _maskRes;
             }
         }
 
     private:
+        boost::dynamic_bitset<> _mask;
+        boost::dynamic_bitset<> _maskRes;
 
         /* data */
         std::vector<RuleType> _rules;

@@ -84,10 +84,10 @@ namespace decision_tree { namespace details {
 #define MetaDataTypeTupleMakeItem(_, DATA, x)   BuildTuple(DATA, SelectElem_0(_, _, x), SelectElem_2(_, _, x))
 #define MetaDataTypeTupleMakeItems(_, DATA, x)  BuildTuple(DATA, SelectElem_0(_, _, x), SelectElem_2(_, _, x)),
 
-#define MetaDataTypeTupleDef(Seq)                           \
+#define MetaDataTypeTupleDef(Seq, TYPE)                     \
     using AllTypes = std::tuple<AllElems(Seq, _, SelectElem_0, SelectElems_0)>; \
-    using PassByRef = typename utils::PassByRef_helper<AllElems(Seq, utils::PassByItem, MetaDataTypeTupleMakeItem, MetaDataTypeTupleMakeItems)>::type;    \
-    using PassByConst = typename utils::PassByConst_helper<AllElems(Seq, utils::PassByItem, MetaDataTypeTupleMakeItem, MetaDataTypeTupleMakeItems)>::type;
+    using PassByRef = typename utils::PassByRef_helper<utils::PassByItem<TYPE, PassBy::Default>, AllElems(Seq, utils::PassByItem, MetaDataTypeTupleMakeItem, MetaDataTypeTupleMakeItems)>::type;    \
+    using PassByConst = typename utils::PassByConst_helper<utils::PassByItem<TYPE, PassBy::Default>, AllElems(Seq, utils::PassByItem, MetaDataTypeTupleMakeItem, MetaDataTypeTupleMakeItems)>::type;
 
 
 /*  tuple of Comparator for each registered type    */
@@ -110,7 +110,7 @@ namespace decision_tree { namespace details {
 
 /*  MetaData class body impl    */
 #define MetaDataBodyImpl(Type, Seq)                                 \
-    MetaDataTypeTupleDef(Seq)                                       \
+    MetaDataTypeTupleDef(Seq, Type)                                 \
     MetaDataTypeEnumDef(Seq)                                        \
     MetaDataCompDef(Seq)                                            \
     MetaDataGetTypeNameDef(Seq)                                     \
