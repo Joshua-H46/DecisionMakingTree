@@ -18,7 +18,6 @@ namespace decision_tree {
             std::vector<ConditionCheck*> _checks;
             DataType _data;
             boost::dynamic_bitset<> _posMask;           // mark checks that should be true
-            boost::dynamic_bitset<> _negMask;           // mark checks that should be false
         };
     }
 
