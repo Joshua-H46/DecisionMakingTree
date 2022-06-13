@@ -67,8 +67,10 @@ namespace decision_tree {
                 }
             }
 
-            _mask.resize(_checks.size(), false);
-            _maskRes.resize(_checks.size(), false);
+            _mask.resize(_checks.size());
+            _mask.reset();
+            _maskRes.resize(_checks.size());
+            _maskRes.reset();
             return true;
         }
 
