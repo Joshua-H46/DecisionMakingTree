@@ -50,7 +50,7 @@ namespace decision_tree {
         template<typename AttrFunc, typename Target, typename Op>
         ConditionCheck* addCompare(AttrFunc attr_, Target target_, Op op_) {
             static_assert(std::is_member_function_pointer_v<AttrFunc>);
-            static_assert(std::is_same_v<details::utils::class_for_mem_func_t<AttrFunc>, CheckT>);
+            static_assert(std::is_same_v<details::utils::class_for_mem_func_t<AttrFunc>, CheckT> || std::is_base_of_v<details::utils::class_for_mem_func_t<AttrFunc>, CheckT>);
             assert(attr_ != nullptr);
             if (attr_ == nullptr) {
                 return nullptr;
